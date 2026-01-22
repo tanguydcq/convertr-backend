@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  users     User[]
+  leads     Lead[]
+
+  @@map("tenants")
+}
+
+
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  role          String         @default("CLIENT_USER")
+  tenantId      String?        @map("tenant_id")
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime       @default(now()) @map("created_at")
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+model Lead {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  company   String?
+  phone     String?
+  status    String   @default("new")
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("leads")
+}
+
+model ExternalCredential {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  provider         String    // "meta_ads", "retell_ai", etc.
+  encryptedPayload Bytes     @map("encrypted_payload")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  rotatedAt        DateTime? @map("rotated_at")
+
+  @@unique([tenantId, provider])
+  @@map("external_credentials")
+}
