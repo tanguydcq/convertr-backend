@@ -3,129 +3,73 @@ import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-export interface TestUser {
+export interface TestAccount {
   id: string;
   email: string;
   password: string;
-  role: string;
-  tenantId: string | null;
+  name: string;
 }
 
 export interface TestData {
-  tenant: { id: string; name: string };
-  tenant2: { id: string; name: string };
-  superAdmin: TestUser;
-  clientAdmin: TestUser;
-  clientUser: TestUser;
-  otherTenantUser: TestUser;
+  account: TestAccount;
+  otherAccount: TestAccount;
 }
 
 export async function setupTestData(): Promise<TestData> {
   // Clean existing data
   await prisma.refreshToken.deleteMany();
   await prisma.lead.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.tenant.deleteMany();
+  await prisma.externalCredential.deleteMany();
+  await prisma.authLog.deleteMany();
+  await prisma.account.deleteMany();
 
-  // Create tenants
-  const tenant = await prisma.tenant.create({
-    data: { name: 'Test Tenant 1' },
-  });
-
-  const tenant2 = await prisma.tenant.create({
-    data: { name: 'Test Tenant 2' },
-  });
-
-
-  // Create SUPER_ADMIN
-  const superAdminPassword = 'SuperAdmin123!';
-  const superAdmin = await prisma.user.create({
+  // Create main account
+  const accountPassword = 'AccountPassword123!';
+  const account = await prisma.account.create({
     data: {
-      email: 'super@test.com',
-      passwordHash: await argon2.hash(superAdminPassword),
-      role: 'SUPER_ADMIN',
-      tenantId: null,
+      name: 'Acme Corp',
+      email: 'acme@test.com',
+      passwordHash: await argon2.hash(accountPassword),
     },
   });
 
-  // Create CLIENT_ADMIN
-  const clientAdminPassword = 'ClientAdmin123!';
-  const clientAdmin = await prisma.user.create({
+  // Create second account (for isolation tests)
+  const otherAccountPassword = 'OtherPassword123!';
+  const otherAccount = await prisma.account.create({
     data: {
-      email: 'admin@test.com',
-      passwordHash: await argon2.hash(clientAdminPassword),
-      role: 'CLIENT_ADMIN',
-      tenantId: tenant.id,
-    },
-  });
-
-  // Create CLIENT_USER
-  const clientUserPassword = 'ClientUser123!';
-  const clientUser = await prisma.user.create({
-    data: {
-      email: 'user@test.com',
-      passwordHash: await argon2.hash(clientUserPassword),
-      role: 'CLIENT_USER',
-      tenantId: tenant.id,
-    },
-  });
-
-  // Create user in second tenant (for isolation tests)
-  const otherTenantUserPassword = 'OtherUser123!';
-  const otherTenantUser = await prisma.user.create({
-    data: {
+      name: 'Other Corp',
       email: 'other@test.com',
-      passwordHash: await argon2.hash(otherTenantUserPassword),
-      role: 'CLIENT_USER',
-      tenantId: tenant2.id,
+      passwordHash: await argon2.hash(otherAccountPassword),
     },
   });
 
-  // Create sample leads for tenant 1
+  // Create sample leads for main account
   await prisma.lead.createMany({
     data: [
-      { firstName: 'Lead', lastName: 'One', email: 'lead1@test.com', tenantId: tenant.id },
-      { firstName: 'Lead', lastName: 'Two', email: 'lead2@test.com', tenantId: tenant.id },
+      { firstName: 'Lead', lastName: 'One', email: 'lead1@test.com', accountId: account.id },
+      { firstName: 'Lead', lastName: 'Two', email: 'lead2@test.com', accountId: account.id },
     ],
   });
 
-  // Create sample leads for tenant 2
+  // Create sample leads for other account
   await prisma.lead.createMany({
     data: [
-      { firstName: 'Lead', lastName: 'Three', email: 'lead3@test.com', tenantId: tenant2.id },
+      { firstName: 'Lead', lastName: 'Three', email: 'lead3@test.com', accountId: otherAccount.id },
     ],
   });
 
   return {
-    tenant: { id: tenant.id, name: tenant.name },
-    tenant2: { id: tenant2.id, name: tenant2.name },
-    superAdmin: {
-      id: superAdmin.id,
-      email: superAdmin.email,
-      password: superAdminPassword,
-      role: superAdmin.role,
-      tenantId: superAdmin.tenantId,
+    account: {
+      id: account.id,
+      email: account.email,
+      name: account.name,
+      password: accountPassword,
     },
-    clientAdmin: {
-      id: clientAdmin.id,
-      email: clientAdmin.email,
-      password: clientAdminPassword,
-      role: clientAdmin.role,
-      tenantId: clientAdmin.tenantId,
-    },
-    clientUser: {
-      id: clientUser.id,
-      email: clientUser.email,
-      password: clientUserPassword,
-      role: clientUser.role,
-      tenantId: clientUser.tenantId,
-    },
-    otherTenantUser: {
-      id: otherTenantUser.id,
-      email: otherTenantUser.email,
-      password: otherTenantUserPassword,
-      role: otherTenantUser.role,
-      tenantId: otherTenantUser.tenantId,
+    otherAccount: {
+      id: otherAccount.id,
+      email: otherAccount.email,
+      name: otherAccount.name,
+      password: otherAccountPassword,
     },
   };
 }
@@ -133,12 +77,14 @@ export async function setupTestData(): Promise<TestData> {
 export async function cleanupTestData(): Promise<void> {
   await prisma.refreshToken.deleteMany();
   await prisma.lead.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.tenant.deleteMany();
+  await prisma.externalCredential.deleteMany();
+  await prisma.authLog.deleteMany();
+  await prisma.account.deleteMany();
 }
 
-export async function getRefreshTokenCount(userId: string): Promise<number> {
-  return prisma.refreshToken.count({ where: { userId } });
+export async function getRefreshTokenCount(accountId: string): Promise<number> {
+  return prisma.refreshToken.count({ where: { accountId } });
 }
 
 export { prisma };
+

@@ -24,31 +24,21 @@ export async function getLeads(
   request: FastifyRequest<{ Querystring: GetLeadsQuery }>,
   reply: FastifyReply
 ): Promise<void> {
-  if (!request.user) {
+  if (!request.account) {
     return reply.status(401).send({
       error: 'Unauthorized',
-      message: 'User not authenticated',
+      message: 'Not authenticated',
     });
   }
 
   const page = Math.max(1, parseInt(request.query.page || '1', 10));
   const limit = Math.min(100, Math.max(1, parseInt(request.query.limit || '20', 10)));
 
-  // SUPER_ADMIN can see all leads
-  if (request.user.role === 'SUPER_ADMIN') {
-    const result = await leadsService.getAllLeads({ page, limit });
-    return reply.status(200).send(result);
-  }
+  // For MVP B2B, every login is an Account admin for their own data.
+  // No SUPER_ADMIN role logic for now, or if needed can add back later.
+  // We strictly scope to the authenticated account.
 
-  // Other users can only see their tenant's leads
-  if (!request.user.tenantId) {
-    return reply.status(403).send({
-      error: 'Forbidden',
-      message: 'User has no associated tenant',
-    });
-  }
-
-  const result = await leadsService.getLeadsByTenant(request.user.tenantId, { page, limit });
+  const result = await leadsService.getLeadsByAccount(request.account.accountId, { page, limit });
   reply.status(200).send(result);
 }
 
@@ -59,17 +49,16 @@ export async function getLeadById(
   request: FastifyRequest<{ Params: { id: string } }>,
   reply: FastifyReply
 ): Promise<void> {
-  if (!request.user) {
+  if (!request.account) {
     return reply.status(401).send({
       error: 'Unauthorized',
-      message: 'User not authenticated',
+      message: 'Not authenticated',
     });
   }
 
   const { id } = request.params;
-  const tenantId = request.user.role === 'SUPER_ADMIN' ? null : request.user.tenantId;
 
-  const lead = await leadsService.getLeadById(id, tenantId || null);
+  const lead = await leadsService.getLeadById(id, request.account.accountId);
 
   if (!lead) {
     return reply.status(404).send({
@@ -88,17 +77,10 @@ export async function createLead(
   request: FastifyRequest<{ Body: CreateLeadBody }>,
   reply: FastifyReply
 ): Promise<void> {
-  if (!request.user) {
+  if (!request.account) {
     return reply.status(401).send({
       error: 'Unauthorized',
-      message: 'User not authenticated',
-    });
-  }
-
-  if (!request.user.tenantId) {
-    return reply.status(403).send({
-      error: 'Forbidden',
-      message: 'User has no associated tenant',
+      message: 'Not authenticated',
     });
   }
 
@@ -111,7 +93,7 @@ export async function createLead(
     source: request.body.source,
   };
 
-  const lead = await leadsService.createLead(request.user.tenantId, input);
+  const lead = await leadsService.createLead(request.account.accountId, input);
 
   reply.status(201).send(lead);
 }

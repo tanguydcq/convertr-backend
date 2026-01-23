@@ -1,11 +1,11 @@
 import { FastifyPluginAsync } from 'fastify';
 import { getLeads, getLeadById, createLead } from './leads.controller.js';
-import { authenticate, tenantGuard } from '../../middleware/index.js';
+import { authenticate } from '../../middleware/index.js';
 
 export const leadsRoutes: FastifyPluginAsync = async (app) => {
-    // GET /api/leads - Get all leads for the tenant (paginated)
+    // GET /api/leads - Get all leads for the account (paginated)
     app.get<{ Querystring: { page?: string; limit?: string } }>('/', {
-        preHandler: [authenticate, tenantGuard],
+        preHandler: [authenticate],
         schema: {
             querystring: {
                 type: 'object',
@@ -47,7 +47,7 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
 
     // GET /api/leads/:id - Get a specific lead
     app.get<{ Params: { id: string } }>('/:id', {
-        preHandler: [authenticate, tenantGuard],
+        preHandler: [authenticate],
         schema: {
             params: {
                 type: 'object',
@@ -61,7 +61,7 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
 
     // POST /api/leads - Create a new lead
     app.post('/', {
-        preHandler: [authenticate, tenantGuard],
+        preHandler: [authenticate],
         schema: {
             body: {
                 type: 'object',

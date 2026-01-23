@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
-import { login, refresh, logout } from './auth.controller.js';
+import { login, refresh, logout, me } from './auth.controller.js';
 import { LoginBody, RefreshBody, LogoutBody } from './auth.schemas.js';
+import { authenticate } from '../../middleware/authenticate.js';
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
     // POST /api/auth/login
@@ -22,13 +23,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
                         accessToken: { type: 'string' },
                         refreshToken: { type: 'string' },
                         expiresIn: { type: 'string' },
-                        user: {
+                        account: {
                             type: 'object',
                             properties: {
                                 id: { type: 'string' },
                                 email: { type: 'string' },
-                                role: { type: 'string' },
-                                tenantId: { type: ['string', 'null'] },
+                                name: { type: 'string' },
                             },
                         },
                     },
@@ -62,6 +62,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
             },
         },
     }, logout);
+
+    // GET /api/auth/me
+    app.get('/me', {
+        preHandler: authenticate,
+    }, me);
 };
 
 export default authRoutes;

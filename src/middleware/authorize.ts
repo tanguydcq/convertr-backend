@@ -1,24 +1,15 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 
-type Role = 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'CLIENT_USER';
-
 /**
- * Creates a Fastify preHandler hook for role-based authorization
+ * Authorization middleware stub.
+ * In the new Account-centric model, we assume the authenticated account
+ * has full access to its own resources.
+ * If we add system-wide admins later, we can re-implement this.
  */
-export function authorize(...allowedRoles: Role[]) {
-  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (!request.user) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-    }
-
-    if (!allowedRoles.includes(request.user.role as Role)) {
-      return reply.status(403).send({
-        error: 'Forbidden',
-        message: `Access denied. Required roles: ${allowedRoles.join(', ')}`,
-      });
-    }
+export async function authorize(
+  _allowRoles: string[]
+): Promise<(request: FastifyRequest, reply: FastifyReply) => Promise<void>> {
+  return async (_request: FastifyRequest, _reply: FastifyReply) => {
+    // No-op for now
   };
 }

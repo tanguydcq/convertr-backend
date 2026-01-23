@@ -7,39 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  createdAt DateTime @default(now()) @map("created_at")
-  users     User[]
-  leads     Lead[]
+model Account {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  @@map("tenants")
-}
+  leads               Lead[]
+  refreshTokens       RefreshToken[]
+  externalCredentials ExternalCredential[]
+  authLogs            AuthLog[]
 
-model User {
-  id            String         @id @default(uuid()) @db.Uuid
-  email         String         @unique
-  passwordHash  String         @map("password_hash")
-  role          String         @default("CLIENT_USER")
-  tenantId      String?        @map("tenant_id") @db.Uuid
-  tenant        Tenant?        @relation(fields: [tenantId], references: [id])
-  createdAt     DateTime       @default(now()) @map("created_at")
-  refreshTokens RefreshToken[]
-
-  @@index([tenantId])
-  @@map("users")
+  @@map("accounts")
 }
 
 model RefreshToken {
   id        String   @id @default(uuid()) @db.Uuid
   token     String   @unique
-  userId    String   @map("user_id") @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String   @map("account_id") @db.Uuid
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([userId])
+  @@index([accountId])
   @@map("refresh_tokens")
 }
 
@@ -52,24 +43,39 @@ model Lead {
   company   String?
   source    String   @default("manual")
   status    String   @default("new")
-  tenantId  String   @map("tenant_id") @db.Uuid
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  accountId String   @map("account_id") @db.Uuid
+  account   Account  @relation(fields: [accountId], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([tenantId])
+  @@index([accountId])
   @@index([status])
   @@map("leads")
 }
 
 model ExternalCredential {
   id               String    @id @default(uuid()) @db.Uuid
-  tenantId         String    @map("tenant_id") @db.Uuid
+  accountId        String    @map("account_id") @db.Uuid
+  account          Account   @relation(fields: [accountId], references: [id])
   provider         String
   encryptedPayload Bytes     @map("encrypted_payload")
   createdAt        DateTime  @default(now()) @map("created_at")
   rotatedAt        DateTime? @map("rotated_at")
 
-  @@unique([tenantId, provider])
-  @@index([tenantId])
+  @@unique([accountId, provider])
+  @@index([accountId])
   @@map("external_credentials")
+}
+
+model AuthLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  action    String
+  metadata  Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@map("auth_logs")
 }

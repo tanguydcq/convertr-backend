@@ -6,7 +6,7 @@
  * SECURITY PROPERTIES:
  * - All secrets encrypted at rest with AES-256-GCM
  * - Decryption only in memory, never logged
- * - One credential set per tenant per provider
+ * - One credential set per account per provider
  * - Supports credential rotation with audit trail
  */
 
@@ -33,19 +33,19 @@ export class CredentialsError extends Error {
 
 class CredentialsService {
     /**
-     * Save or update credentials for a tenant/provider pair.
+     * Save or update credentials for an account/provider pair.
      * If credentials already exist, use rotateCredentials() instead.
      * 
      * @throws CredentialsError if credentials already exist
      */
     async saveCredentials<P extends Provider>(
-        tenantId: string,
+        accountId: string,
         provider: P,
         secrets: ProviderSecretsMap[P],
     ): Promise<void> {
         // Check if credentials already exist
         const existing = await prisma.externalCredential.findUnique({
-            where: { tenantId_provider: { tenantId, provider } },
+            where: { accountId_provider: { accountId, provider } },
         });
 
         if (existing) {
@@ -59,7 +59,7 @@ class CredentialsService {
 
         await prisma.externalCredential.create({
             data: {
-                tenantId,
+                accountId,
                 provider,
                 encryptedPayload,
             },
@@ -67,16 +67,16 @@ class CredentialsService {
     }
 
     /**
-     * Retrieve and decrypt credentials for a tenant/provider pair.
+     * Retrieve and decrypt credentials for an account/provider pair.
      * 
      * @returns Decrypted credentials or null if not found
      */
     async getCredentials<P extends Provider>(
-        tenantId: string,
+        accountId: string,
         provider: P,
     ): Promise<DecryptedCredential<P> | null> {
         const record = await prisma.externalCredential.findUnique({
-            where: { tenantId_provider: { tenantId, provider } },
+            where: { accountId_provider: { accountId, provider } },
         });
 
         if (!record) {
@@ -87,7 +87,7 @@ class CredentialsService {
 
         return {
             id: record.id,
-            tenantId: record.tenantId,
+            accountId: record.accountId,
             provider: provider,
             secrets,
             createdAt: record.createdAt,
@@ -102,12 +102,12 @@ class CredentialsService {
      * @throws CredentialsError if credentials don't exist
      */
     async rotateCredentials<P extends Provider>(
-        tenantId: string,
+        accountId: string,
         provider: P,
         newSecrets: ProviderSecretsMap[P],
     ): Promise<void> {
         const existing = await prisma.externalCredential.findUnique({
-            where: { tenantId_provider: { tenantId, provider } },
+            where: { accountId_provider: { accountId, provider } },
         });
 
         if (!existing) {
@@ -129,13 +129,13 @@ class CredentialsService {
     }
 
     /**
-     * Delete credentials for a tenant/provider pair.
+     * Delete credentials for an account/provider pair.
      * 
      * @throws CredentialsError if credentials don't exist
      */
-    async deleteCredentials(tenantId: string, provider: Provider): Promise<void> {
+    async deleteCredentials(accountId: string, provider: Provider): Promise<void> {
         const existing = await prisma.externalCredential.findUnique({
-            where: { tenantId_provider: { tenantId, provider } },
+            where: { accountId_provider: { accountId, provider } },
         });
 
         if (!existing) {
@@ -151,23 +151,23 @@ class CredentialsService {
     }
 
     /**
-     * Check if credentials exist for a tenant/provider pair.
+     * Check if credentials exist for an account/provider pair.
      * Does not decrypt the credentials.
      */
-    async hasCredentials(tenantId: string, provider: Provider): Promise<boolean> {
+    async hasCredentials(accountId: string, provider: Provider): Promise<boolean> {
         const count = await prisma.externalCredential.count({
-            where: { tenantId, provider },
+            where: { accountId, provider },
         });
         return count > 0;
     }
 
     /**
-     * List all providers with stored credentials for a tenant.
+     * List all providers with stored credentials for an account.
      * Does not decrypt any credentials.
      */
-    async listProviders(tenantId: string): Promise<Provider[]> {
+    async listProviders(accountId: string): Promise<Provider[]> {
         const records = await prisma.externalCredential.findMany({
-            where: { tenantId },
+            where: { accountId },
             select: { provider: true },
         });
 

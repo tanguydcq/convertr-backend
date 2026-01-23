@@ -2,9 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
 
 export interface JwtPayload {
-  userId: string;
-  role: string;
-  tenantId: string | null;
+  accountId: string;
 }
 
 export interface DecodedToken extends JwtPayload {
@@ -24,6 +22,10 @@ export function generateRefreshToken(payload: JwtPayload): string {
   } as jwt.SignOptions);
 }
 
+export function verifyAccessToken(token: string): DecodedToken {
+  return jwt.verify(token, config.JWT_SECRET) as DecodedToken;
+}
+
 export function verifyToken(token: string): DecodedToken {
   return jwt.verify(token, config.JWT_SECRET) as DecodedToken;
 }
@@ -41,6 +43,11 @@ export function getTokenExpirationDate(expiresIn: string): Date {
   const match = expiresIn.match(/^(\d+)([smhd])$/);
 
   if (!match) {
+    // Fallback if format is not regex matched, though config should be correct
+    // Assuming config is trusted, maybe just default to 7 days if failing
+    // But for MVP let's keep the existing logic or simple parser
+    // If expiresIn is just a number string, handle that?
+    // Let's stick to the previous logic which was regex based
     throw new Error(`Invalid expiration format: ${expiresIn}`);
   }
 

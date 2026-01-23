@@ -41,10 +41,10 @@ export interface PaginatedLeads {
 
 class LeadsService {
   /**
-   * Get leads for a specific tenant with pagination
+   * Get leads for a specific account with pagination
    */
-  async getLeadsByTenant(
-    tenantId: string,
+  async getLeadsByAccount(
+    accountId: string,
     pagination: PaginationParams
   ): Promise<PaginatedLeads> {
     const { page, limit } = pagination;
@@ -52,12 +52,12 @@ class LeadsService {
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
-        where: { tenantId },
+        where: { accountId },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      prisma.lead.count({ where: { tenantId } }),
+      prisma.lead.count({ where: { accountId } }),
     ]);
 
     return {
@@ -70,9 +70,9 @@ class LeadsService {
   }
 
   /**
-   * Get all leads (for SUPER_ADMIN) with pagination
+   * Get all leads (for system admin, if implemented later) with pagination
    */
-  async getAllLeads(pagination: PaginationParams): Promise<PaginatedLeads & { leads: (LeadDTO & { tenantId: string })[] }> {
+  async getAllLeads(pagination: PaginationParams): Promise<PaginatedLeads & { leads: (LeadDTO & { accountId: string })[] }> {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
@@ -88,7 +88,7 @@ class LeadsService {
     return {
       leads: leads.map((lead) => ({
         ...this.toDTO(lead),
-        tenantId: lead.tenantId,
+        accountId: lead.accountId,
       })),
       total,
       page,
@@ -98,20 +98,24 @@ class LeadsService {
   }
 
   /**
-   * Get a single lead by ID and tenant
+   * Get a single lead by ID and account
    */
-  async getLeadById(id: string, tenantId: string | null): Promise<LeadDTO | null> {
-    const where = tenantId ? { id, tenantId } : { id };
-
-    const lead = await prisma.lead.findFirst({ where });
+  async getLeadById(id: string, accountId: string): Promise<LeadDTO | null> {
+    // We enforce accountId check to ensure isolation
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id,
+        accountId
+      }
+    });
 
     return lead ? this.toDTO(lead) : null;
   }
 
   /**
-   * Create a new lead for a tenant
+   * Create a new lead for an account
    */
-  async createLead(tenantId: string, input: CreateLeadInput): Promise<LeadDTO> {
+  async createLead(accountId: string, input: CreateLeadInput): Promise<LeadDTO> {
     const lead = await prisma.lead.create({
       data: {
         firstName: input.firstName,
@@ -120,7 +124,7 @@ class LeadsService {
         phone: input.phone ?? null,
         company: input.company ?? null,
         source: input.source ?? 'manual',
-        tenantId,
+        accountId,
       },
     });
 

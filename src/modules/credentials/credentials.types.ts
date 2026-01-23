@@ -56,7 +56,7 @@ export interface SaveCredentialsInput<P extends Provider> {
  */
 export interface DecryptedCredential<P extends Provider> {
     id: string;
-    tenantId: string;
+    accountId: string;
     provider: P;
     secrets: ProviderSecretsMap[P];
     createdAt: Date;

@@ -13,7 +13,7 @@ export class MetaService {
     private client: MetaClient | null = null;
 
     /**
-     * Initialize the client with tenant-specific configuration
+     * Initialize the client with account-specific configuration
      * In production, you'd fetch this from a database
      */
     private initClient(config: MetaApiConfig): void {
@@ -35,31 +35,31 @@ export class MetaService {
     // ===========================================================================
 
     /**
-     * Get configuration for a tenant
+     * Get configuration for an account
      * TODO: Implement actual storage (database table for integration configs)
      */
-    async getConfigForTenant(tenantId: string): Promise<MetaApiConfig | null> {
+    async getConfigForAccount(accountId: string): Promise<MetaApiConfig | null> {
         // Placeholder - in production, fetch from database
         // Example:
         // const config = await prisma.integrationConfig.findFirst({
-        //   where: { tenantId, provider: 'META' },
+        //   where: { accountId, provider: 'META' },
         // });
         // return config ? { accessToken: config.accessToken } : null;
 
-        console.warn(`[MetaService] getConfigForTenant not implemented for tenant ${tenantId}`);
+        console.warn(`[MetaService] getConfigForAccount not implemented for account ${accountId}`);
         return null;
     }
 
     /**
-     * Save configuration for a tenant
+     * Save configuration for an account
      * TODO: Implement actual storage
      */
-    async saveConfigForTenant(
-        tenantId: string,
+    async saveConfigForAccount(
+        accountId: string,
         _config: MetaApiConfig,
     ): Promise<void> {
         // Placeholder - in production, save to database
-        console.warn(`[MetaService] saveConfigForTenant not implemented for tenant ${tenantId}`);
+        console.warn(`[MetaService] saveConfigForAccount not implemented for account ${accountId}`);
     }
 
     // ===========================================================================
@@ -67,10 +67,10 @@ export class MetaService {
     // ===========================================================================
 
     /**
-     * Get connected ad accounts for a tenant
+     * Get connected ad accounts for an account
      */
-    async getConnectedAccounts(tenantId: string): Promise<MetaAdAccount[]> {
-        const config = await this.getConfigForTenant(tenantId);
+    async getConnectedAccounts(accountId: string): Promise<MetaAdAccount[]> {
+        const config = await this.getConfigForAccount(accountId);
         if (!config) {
             return [];
         }
@@ -87,10 +87,10 @@ export class MetaService {
     /**
      * Get lead forms for a page
      */
-    async getLeadForms(tenantId: string, pageId: string): Promise<MetaLeadGenForm[]> {
-        const config = await this.getConfigForTenant(tenantId);
+    async getLeadForms(accountId: string, pageId: string): Promise<MetaLeadGenForm[]> {
+        const config = await this.getConfigForAccount(accountId);
         if (!config) {
-            throw new Error('Meta integration not configured for this tenant');
+            throw new Error('Meta integration not configured for this account');
         }
 
         this.initClient(config);
@@ -106,13 +106,13 @@ export class MetaService {
      * Fetch leads from Meta without saving to database
      */
     async fetchLeadsFromForm(
-        tenantId: string,
+        accountId: string,
         formId: string,
         since?: Date,
     ): Promise<MetaLeadInternal[]> {
-        const config = await this.getConfigForTenant(tenantId);
+        const config = await this.getConfigForAccount(accountId);
         if (!config) {
-            throw new Error('Meta integration not configured for this tenant');
+            throw new Error('Meta integration not configured for this account');
         }
 
         this.initClient(config);
@@ -125,13 +125,13 @@ export class MetaService {
      * Sync leads from a Meta form into the database
      */
     async syncLeadsFromForm(
-        tenantId: string,
+        accountId: string,
         formId: string,
         since?: Date,
     ): Promise<SyncResult> {
-        const config = await this.getConfigForTenant(tenantId);
+        const config = await this.getConfigForAccount(accountId);
         if (!config) {
-            throw new Error('Meta integration not configured for this tenant');
+            throw new Error('Meta integration not configured for this account');
         }
 
         this.initClient(config);
@@ -144,14 +144,14 @@ export class MetaService {
                 return result;
             }
 
-            const leadsToCreate = mapMetaLeadsToPrismaInputs(metaLeads, tenantId);
+            const leadsToCreate = mapMetaLeadsToPrismaInputs(metaLeads, accountId);
 
             // Filter out leads that already exist (by email)
             const existingEmails = new Set(
                 (
                     await prisma.lead.findMany({
                         where: {
-                            tenantId,
+                            accountId,
                             email: { in: leadsToCreate.map((l) => l.email) },
                         },
                         select: { email: true },

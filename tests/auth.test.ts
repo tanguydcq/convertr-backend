@@ -23,8 +23,8 @@ describe('Authentication API', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: {
-          email: testData.clientAdmin.email,
-          password: testData.clientAdmin.password,
+          email: testData.account.email,
+          password: testData.account.password,
         },
       });
 
@@ -33,10 +33,9 @@ describe('Authentication API', () => {
       expect(body).toHaveProperty('accessToken');
       expect(body).toHaveProperty('refreshToken');
       expect(body).toHaveProperty('expiresIn');
-      expect(body.user).toHaveProperty('id');
-      expect(body.user.email).toBe(testData.clientAdmin.email);
-      expect(body.user.role).toBe('CLIENT_ADMIN');
-      expect(body.user.tenantId).toBe(testData.tenant.id);
+      expect(body.account).toHaveProperty('id');
+      expect(body.account.email).toBe(testData.account.email);
+      expect(body.account.name).toBe(testData.account.name);
     });
 
     it('should fail with invalid email', async () => {
@@ -57,7 +56,7 @@ describe('Authentication API', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: {
-          email: testData.clientAdmin.email,
+          email: testData.account.email,
           password: 'wrongpassword',
         },
       });
@@ -86,8 +85,8 @@ describe('Authentication API', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: {
-          email: testData.clientUser.email,
-          password: testData.clientUser.password,
+          email: testData.account.email,
+          password: testData.account.password,
         },
       });
       refreshToken = JSON.parse(loginResponse.body).refreshToken;
@@ -128,8 +127,8 @@ describe('Authentication API', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: {
-          email: testData.clientUser.email,
-          password: testData.clientUser.password,
+          email: testData.account.email,
+          password: testData.account.password,
         },
       });
 
@@ -163,31 +162,31 @@ describe('Authentication API', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: {
-          email: testData.clientAdmin.email,
-          password: testData.clientAdmin.password,
+          email: testData.account.email,
+          password: testData.account.password,
         },
       });
       accessToken = JSON.parse(loginResponse.body).accessToken;
     });
 
-    it('should return current user profile with valid token', async () => {
+    it('should return current account profile with valid token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/me',
+        url: '/api/auth/me',
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.email).toBe(testData.clientAdmin.email);
-      expect(body.role).toBe('CLIENT_ADMIN');
-      expect(body.tenantId).toBe(testData.tenant.id);
+      expect(body.email).toBe(testData.account.email);
+      expect(body.name).toBe(testData.account.name);
+      expect(body.id).toBe(testData.account.id);
     });
 
     it('should fail without authorization header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/me',
+        url: '/api/auth/me',
       });
 
       expect(response.statusCode).toBe(401);
@@ -196,7 +195,7 @@ describe('Authentication API', () => {
     it('should fail with invalid token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/api/me',
+        url: '/api/auth/me',
         headers: { Authorization: 'Bearer invalid-token' },
       });
 

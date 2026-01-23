@@ -1,125 +1,102 @@
 import { PrismaClient } from '@prisma/client';
-import argon2 from 'argon2';
+import { hashPassword } from '../src/lib/password.js';
+import { faker } from '@faker-js/faker';
 
 const prisma = new PrismaClient();
 
-/**
- * Hash a password using Argon2id (same config as src/lib/password.ts)
- */
-async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, {
-    type: argon2.argon2id,
-    memoryCost: 65536,
-    timeCost: 3,
-    parallelism: 4,
-  });
-}
-
 async function main() {
-  console.log('🌱 Starting database seed...');
+  console.log('Seeding database...');
 
-  // Clean existing data
-  await prisma.refreshToken.deleteMany();
+  // Clean up existing data
   await prisma.lead.deleteMany();
+  await prisma.refreshToken.deleteMany();
   await prisma.externalCredential.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.tenant.deleteMany();
+  await prisma.authLog.deleteMany();
+  await prisma.account.deleteMany();
 
-  console.log('✓ Cleaned existing data');
+  const passwordHash = await hashPassword('password123');
 
-  // Create tenant
-  const tenant = await prisma.tenant.create({
+  // --- 1. Create Main Test Account (Acme Corp) ---
+  const acmeAccount = await prisma.account.create({
     data: {
       name: 'Acme Corp',
-    },
-  });
-  console.log(`✓ Created tenant: ${tenant.name}`);
-
-  // Hash passwords
-  const superAdminPassword = await hashPassword('SuperAdmin123!');
-  const clientAdminPassword = await hashPassword('ClientAdmin123!');
-  const clientUserPassword = await hashPassword('ClientUser123!');
-
-  // Create SUPER_ADMIN (no tenant - Convertr internal)
-  const superAdmin = await prisma.user.create({
-    data: {
-      email: 'super@convertr.io',
-      passwordHash: superAdminPassword,
-      role: 'SUPER_ADMIN',
-      tenantId: null,
-    },
-  });
-  console.log(`✓ Created SUPER_ADMIN: ${superAdmin.email}`);
-
-  // Create CLIENT_ADMIN
-  const clientAdmin = await prisma.user.create({
-    data: {
-      email: 'admin@acme.com',
-      passwordHash: clientAdminPassword,
-      role: 'CLIENT_ADMIN',
-      tenantId: tenant.id,
-    },
-  });
-  console.log(`✓ Created CLIENT_ADMIN: ${clientAdmin.email}`);
-
-  // Create CLIENT_USER
-  const clientUser = await prisma.user.create({
-    data: {
-      email: 'user@acme.com',
-      passwordHash: clientUserPassword,
-      role: 'CLIENT_USER',
-      tenantId: tenant.id,
-    },
-  });
-  console.log(`✓ Created CLIENT_USER: ${clientUser.email}`);
-
-  // Create sample leads for the tenant
-  const leads = await prisma.lead.createMany({
-    data: [
-      {
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@example.com',
-        company: 'TechCorp',
-        phone: '+1-555-0101',
-        source: 'manual',
-        status: 'new',
-        tenantId: tenant.id,
+      email: 'admin@acmecorp.com',
+      passwordHash,
+      leads: {
+        create: [
+          {
+            firstName: 'John',
+            lastName: 'Doe',
+            email: 'john.doe@example.com',
+            source: 'website',
+            status: 'new',
+            company: 'TechCorp',
+          },
+          {
+            firstName: 'Jane',
+            lastName: 'Smith',
+            email: 'jane.smith@example.com',
+            source: 'linkedin',
+            status: 'contacted',
+            company: 'BizInc',
+          },
+        ],
       },
-      {
-        firstName: 'Jane',
-        lastName: 'Smith',
-        email: 'jane.smith@example.com',
-        company: 'StartupXYZ',
-        phone: '+1-555-0102',
-        source: 'meta',
-        status: 'contacted',
-        tenantId: tenant.id,
-      },
-      {
-        firstName: 'Bob',
-        lastName: 'Johnson',
-        email: 'bob.johnson@example.com',
-        company: 'Enterprise Ltd',
-        phone: '+1-555-0103',
-        source: 'api',
-        status: 'qualified',
-        tenantId: tenant.id,
-      },
-    ],
+    },
   });
-  console.log(`✓ Created ${leads.count} sample leads`);
 
-  console.log('\n✅ Database seeded successfully!');
-  console.log('\n📋 Test Credentials:');
-  console.log('  SUPER_ADMIN:  super@convertr.io / SuperAdmin123!');
-  console.log('  CLIENT_ADMIN: admin@acme.com / ClientAdmin123!');
-  console.log('  CLIENT_USER:  user@acme.com / ClientUser123!');
+  console.log(`Created main account: ${acmeAccount.name} (${acmeAccount.email})`);
+
+  // --- 2. Generate Random Accounts and Leads ---
+  const NUM_ACCOUNTS = 15;
+  const MIN_LEADS_PER_ACCOUNT = 20;
+  const MAX_LEADS_PER_ACCOUNT = 50;
+
+  console.log(`Generating ${NUM_ACCOUNTS} random accounts with leads...`);
+
+  for (let i = 0; i < NUM_ACCOUNTS; i++) {
+    const companyName = faker.company.name();
+    const firstName = faker.person.firstName();
+
+    // Create Account
+    const account = await prisma.account.create({
+      data: {
+        name: companyName,
+        email: faker.internet.email({ firstName, provider: companyName.toLowerCase().replace(/[^a-z]/g, '') + '.com' }),
+        passwordHash,
+      },
+    });
+
+    // Generate Leads for this Account
+    const numLeads = faker.number.int({ min: MIN_LEADS_PER_ACCOUNT, max: MAX_LEADS_PER_ACCOUNT });
+    const leadsData = [];
+
+    for (let j = 0; j < numLeads; j++) {
+      leadsData.push({
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        email: faker.internet.email(),
+        phone: faker.phone.number(),
+        company: faker.company.name(),
+        source: faker.helpers.arrayElement(['website', 'linkedin', 'referral', 'cold_call', 'ad_campaign']),
+        status: faker.helpers.arrayElement(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed', 'lost']),
+        accountId: account.id,
+      });
+    }
+
+    await prisma.lead.createMany({
+      data: leadsData,
+    });
+
+    // console.log(`  - Created account "${companyName}" with ${numLeads} leads.`);
+  }
+
+  console.log('Seeding completed successfully.');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {

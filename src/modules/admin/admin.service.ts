@@ -1,81 +1,69 @@
 import prisma from '../../lib/prisma.js';
-import { Tenant } from '@prisma/client';
+import { Account } from '@prisma/client';
 
-export interface TenantDTO {
+export interface AccountDTO {
   id: string;
   name: string;
+  email: string;
   createdAt: Date;
-  userCount?: number;
 }
 
 class AdminService {
   /**
-   * Create a new tenant
+   * Create a new account (basic)
+   * Note: Usually accounts are creating via signup, but admin might want to provision one.
+   * For MVP simplicity, we might reuse auth service or just basic creation here without password?
+   * Or we skip this method if not used. 
+   * Let's keep it but simplified.
    */
-  async createTenant(name: string): Promise<TenantDTO> {
-    const tenant = await prisma.tenant.create({
-      data: { name },
-    });
-
-    return this.toDTO(tenant);
+  async createAccount(_name: string, _email: string): Promise<AccountDTO> {
+    // This method would require password handling.
+    // For now, let's just throw or return mock, expecting admin to use Seed or special flow.
+    // Or we leave it unimplemented.
+    throw new Error('Not implemented. Accounts should sign up.');
   }
 
   /**
-   * Get all tenants with user counts
+   * Get all accounts
    */
-  async getAllTenants(): Promise<TenantDTO[]> {
-    const tenants = await prisma.tenant.findMany({
-      include: {
-        _count: {
-          select: { users: true },
-        },
-      },
+  async getAllAccounts(): Promise<AccountDTO[]> {
+    const accounts = await prisma.account.findMany({
       orderBy: { createdAt: 'desc' },
     });
 
-    return tenants.map((tenant) => ({
-      ...this.toDTO(tenant),
-      userCount: tenant._count.users,
-    }));
+    return accounts.map(this.toDTO);
   }
 
   /**
-   * Get a single tenant by ID
+   * Get a single account by ID
    */
-  async getTenantById(id: string): Promise<TenantDTO | null> {
-    const tenant = await prisma.tenant.findUnique({
+  async getAccountById(id: string): Promise<AccountDTO | null> {
+    const account = await prisma.account.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: { users: true },
-        },
-      },
     });
 
-    if (!tenant) {
+    if (!account) {
       return null;
     }
 
-    return {
-      ...this.toDTO(tenant),
-      userCount: tenant._count.users,
-    };
+    return this.toDTO(account);
   }
 
   /**
-   * Delete a tenant (and all associated data)
+   * Delete an account (and all associated data)
    */
-  async deleteTenant(id: string): Promise<void> {
-    await prisma.tenant.delete({
+  async deleteAccount(id: string): Promise<void> {
+    await prisma.account.delete({
       where: { id },
     });
   }
 
-  private toDTO(tenant: Tenant): TenantDTO {
+  private toDTO(account: Account): AccountDTO {
     return {
-      id: tenant.id,
-      name: tenant.name,
-      createdAt: tenant.createdAt,
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      createdAt: account.createdAt,
     };
   }
 }

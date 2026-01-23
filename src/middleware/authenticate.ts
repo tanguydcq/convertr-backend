@@ -3,7 +3,7 @@ import { verifyToken } from '../lib/jwt.js';
 
 /**
  * Fastify preHandler hook for authentication
- * Verifies JWT token and attaches user to request
+ * Verifies JWT token and attaches account to request
  */
 export async function authenticate(
   request: FastifyRequest,
@@ -37,10 +37,8 @@ export async function authenticate(
   try {
     const decoded = verifyToken(token);
 
-    request.user = {
-      userId: decoded.userId,
-      role: decoded.role,
-      tenantId: decoded.tenantId ?? undefined,
+    request.account = {
+      accountId: decoded.accountId,
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'TokenExpiredError') {

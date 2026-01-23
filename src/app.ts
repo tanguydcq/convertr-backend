@@ -4,20 +4,10 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './config/index.js';
 import { authRoutes } from './modules/auth/index.js';
-import { usersRoutes } from './modules/users/index.js';
 import { leadsRoutes } from './modules/leads/index.js';
 import { adminRoutes } from './modules/admin/index.js';
 
-// Extend Fastify types
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      userId: string;
-      role: string;
-      tenantId?: string;
-    };
-  }
-}
+// Extend Fastify types (see src/types/fastify.d.ts)
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -63,7 +53,6 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // API Routes
   await app.register(authRoutes, { prefix: '/api/auth' });
-  await app.register(usersRoutes, { prefix: '/api' });
   await app.register(leadsRoutes, { prefix: '/api/leads' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
 

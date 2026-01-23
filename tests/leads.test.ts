@@ -5,47 +5,35 @@ import { setupTestData, cleanupTestData, TestData } from './helpers';
 describe('Leads API', () => {
     let app: FastifyInstance;
     let testData: TestData;
-    let tenant1Token: string;
-    let tenant2Token: string;
-    let superAdminToken: string;
+    let accountToken: string;
+    let otherAccountToken: string;
 
     beforeAll(async () => {
         app = await buildApp();
         await app.ready();
         testData = await setupTestData();
 
-        // Login as tenant 1 user
+        // Login as account 1
         const t1Response = await app.inject({
             method: 'POST',
             url: '/api/auth/login',
             payload: {
-                email: testData.clientUser.email,
-                password: testData.clientUser.password,
+                email: testData.account.email,
+                password: testData.account.password,
             },
         });
-        tenant1Token = JSON.parse(t1Response.body).accessToken;
+        accountToken = JSON.parse(t1Response.body).accessToken;
 
-        // Login as tenant 2 user
+        // Login as account 2
         const t2Response = await app.inject({
             method: 'POST',
             url: '/api/auth/login',
             payload: {
-                email: testData.otherTenantUser.email,
-                password: testData.otherTenantUser.password,
+                email: testData.otherAccount.email,
+                password: testData.otherAccount.password,
             },
         });
-        tenant2Token = JSON.parse(t2Response.body).accessToken;
-
-        // Login as super admin
-        const saResponse = await app.inject({
-            method: 'POST',
-            url: '/api/auth/login',
-            payload: {
-                email: testData.superAdmin.email,
-                password: testData.superAdmin.password,
-            },
-        });
-        superAdminToken = JSON.parse(saResponse.body).accessToken;
+        otherAccountToken = JSON.parse(t2Response.body).accessToken;
     });
 
     afterAll(async () => {
@@ -57,11 +45,11 @@ describe('Leads API', () => {
     // GET /api/leads - List Leads
     // ==========================================
     describe('GET /api/leads', () => {
-        it('should return paginated leads for tenant 1', async () => {
+        it('should return paginated leads for account 1', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             expect(response.statusCode).toBe(200);
@@ -74,42 +62,29 @@ describe('Leads API', () => {
             expect(body).toHaveProperty('hasMore');
             expect(body.page).toBe(1);
             expect(body.limit).toBe(20);
-            expect(body.leads.length).toBe(2); // Tenant 1 has 2 leads
+            expect(body.leads.length).toBe(2); // Account 1 has 2 leads
         });
 
-        it('should return only leads for tenant 2', async () => {
+        it('should return only leads for account 2', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant2Token}` },
+                headers: { Authorization: `Bearer ${otherAccountToken}` },
             });
 
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.body);
 
-            expect(body.leads.length).toBe(1); // Tenant 2 has 1 lead
+            expect(body.leads.length).toBe(1); // Account 2 has 1 lead
             expect(body.leads[0].firstName).toBe('Lead');
             expect(body.leads[0].lastName).toBe('Three');
-        });
-
-        it('SUPER_ADMIN should see all leads', async () => {
-            const response = await app.inject({
-                method: 'GET',
-                url: '/api/leads',
-                headers: { Authorization: `Bearer ${superAdminToken}` },
-            });
-
-            expect(response.statusCode).toBe(200);
-            const body = JSON.parse(response.body);
-
-            expect(body.leads.length).toBe(3); // All leads from both tenants
         });
 
         it('should support pagination with page and limit', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads?page=1&limit=1',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             expect(response.statusCode).toBe(200);
@@ -139,11 +114,11 @@ describe('Leads API', () => {
         let leadId: string;
 
         beforeAll(async () => {
-            // Get a lead ID from tenant 1
+            // Get a lead ID from account 1
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
             const body = JSON.parse(response.body);
             leadId = body.leads[0].id;
@@ -153,7 +128,7 @@ describe('Leads API', () => {
             const response = await app.inject({
                 method: 'GET',
                 url: `/api/leads/${leadId}`,
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             expect(response.statusCode).toBe(200);
@@ -167,31 +142,21 @@ describe('Leads API', () => {
             expect(body).toHaveProperty('source');
         });
 
-        it('should not allow tenant 2 to access tenant 1 lead', async () => {
+        it('should not allow account 2 to access account 1 lead', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: `/api/leads/${leadId}`,
-                headers: { Authorization: `Bearer ${tenant2Token}` },
+                headers: { Authorization: `Bearer ${otherAccountToken}` },
             });
 
             expect(response.statusCode).toBe(404);
-        });
-
-        it('SUPER_ADMIN should access any lead', async () => {
-            const response = await app.inject({
-                method: 'GET',
-                url: `/api/leads/${leadId}`,
-                headers: { Authorization: `Bearer ${superAdminToken}` },
-            });
-
-            expect(response.statusCode).toBe(200);
         });
 
         it('should return 404 for non-existent lead', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads/00000000-0000-0000-0000-000000000000',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             expect(response.statusCode).toBe(404);
@@ -206,7 +171,7 @@ describe('Leads API', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'New',
                     lastName: 'Lead',
@@ -234,7 +199,7 @@ describe('Leads API', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'Minimal',
                     lastName: 'Test',
@@ -253,7 +218,7 @@ describe('Leads API', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'Missing',
                     // Missing lastName and email
@@ -267,7 +232,7 @@ describe('Leads API', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'Test',
                     lastName: 'User',
@@ -298,7 +263,7 @@ describe('Leads API', () => {
             await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'Unique',
                     lastName: 'Lead',
@@ -310,7 +275,7 @@ describe('Leads API', () => {
             const listResponse = await app.inject({
                 method: 'GET',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             const body = JSON.parse(listResponse.body);
@@ -320,41 +285,41 @@ describe('Leads API', () => {
     });
 
     // ==========================================
-    // Multi-tenancy Isolation
+    // Multi-tenancy Isolation (Account Isolation)
     // ==========================================
     describe('Multi-tenancy Isolation', () => {
-        it('tenant 1 cannot see tenant 2 leads in list', async () => {
+        it('account 1 cannot see account 2 leads in list', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
             });
 
             const body = JSON.parse(response.body);
-            const tenant2Lead = body.leads.find((l: any) => l.lastName === 'Three');
-            expect(tenant2Lead).toBeUndefined();
+            const account2Lead = body.leads.find((l: any) => l.lastName === 'Three');
+            expect(account2Lead).toBeUndefined();
         });
 
-        it('created leads are isolated per tenant', async () => {
-            // Create lead as tenant 1
+        it('created leads are isolated per account', async () => {
+            // Create lead as account 1
             const createResponse = await app.inject({
                 method: 'POST',
                 url: '/api/leads',
-                headers: { Authorization: `Bearer ${tenant1Token}` },
+                headers: { Authorization: `Bearer ${accountToken}` },
                 payload: {
                     firstName: 'Isolated',
                     lastName: 'Lead',
-                    email: 'isolated@tenant1.com',
+                    email: 'isolated@account1.com',
                 },
             });
 
             const createdId = JSON.parse(createResponse.body).id;
 
-            // Tenant 2 should not be able to access it
+            // Account 2 should not be able to access it
             const getResponse = await app.inject({
                 method: 'GET',
                 url: `/api/leads/${createdId}`,
-                headers: { Authorization: `Bearer ${tenant2Token}` },
+                headers: { Authorization: `Bearer ${otherAccountToken}` },
             });
 
             expect(getResponse.statusCode).toBe(404);

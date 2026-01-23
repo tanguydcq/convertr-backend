@@ -1,13 +1,15 @@
-// Type definitions for admin request bodies
-export interface CreateTenantBody {
+// Fastify schemas for admin routes
+
+export const createTenantSchema = {
+    type: 'object',
+    required: ['name', 'email'],
+    properties: {
+        name: { type: 'string', minLength: 1 },
+        email: { type: 'string', format: 'email' },
+    },
+};
+
+export type CreateTenantBody = {
     name: string;
-}
-
-// Zod schemas kept for service-level validation if needed
-import { z } from 'zod';
-
-export const createTenantSchema = z.object({
-    name: z.string().min(1, 'Tenant name is required').max(255),
-});
-
-export type CreateTenantInput = z.infer<typeof createTenantSchema>;
+    email: string;
+};
