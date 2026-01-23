@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "leads" ADD COLUMN     "budget" TEXT,
+ADD COLUMN     "score" INTEGER NOT NULL DEFAULT 0,
+ALTER COLUMN "status" SET DEFAULT 'NEW_LEAD';

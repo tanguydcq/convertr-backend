@@ -14,7 +14,10 @@ interface CreateLeadBody {
   email: string;
   phone?: string;
   company?: string;
+  budget?: string;
+  score?: number;
   source?: string;
+  status?: string;
 }
 
 /**
@@ -90,7 +93,10 @@ export async function createLead(
     email: request.body.email,
     phone: request.body.phone,
     company: request.body.company,
+    budget: request.body.budget,
+    score: request.body.score,
     source: request.body.source,
+    status: request.body.status,
   };
 
   const lead = await leadsService.createLead(request.account.accountId, input);

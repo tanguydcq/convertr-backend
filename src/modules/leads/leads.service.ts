@@ -9,6 +9,8 @@ export interface LeadDTO {
   email: string;
   phone: string | null;
   company: string | null;
+  budget: string | null;
+  score: number;
   source: string;
   status: string;
   createdAt: Date;
@@ -21,7 +23,10 @@ export interface CreateLeadInput {
   email: string;
   phone?: string;
   company?: string;
+  budget?: string;
+  score?: number;
   source?: string;
+  status?: string;
 }
 
 // Pagination params
@@ -123,7 +128,10 @@ class LeadsService {
         email: input.email,
         phone: input.phone ?? null,
         company: input.company ?? null,
+        budget: input.budget ?? null,
+        score: input.score ?? 0,
         source: input.source ?? 'manual',
+        status: input.status ?? 'NEW_LEAD',
         accountId,
       },
     });
@@ -139,6 +147,8 @@ class LeadsService {
       email: lead.email,
       phone: lead.phone,
       company: lead.company,
+      budget: lead.budget,
+      score: lead.score,
       source: lead.source,
       status: lead.status,
       createdAt: lead.createdAt,

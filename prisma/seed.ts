@@ -29,16 +29,20 @@ async function main() {
             lastName: 'Doe',
             email: 'john.doe@example.com',
             source: 'website',
-            status: 'new',
+            status: 'NEW_LEAD',
             company: 'TechCorp',
+            budget: '$150k',
+            score: 75,
           },
           {
             firstName: 'Jane',
             lastName: 'Smith',
             email: 'jane.smith@example.com',
             source: 'linkedin',
-            status: 'contacted',
+            status: 'IN_QUALIFICATION',
             company: 'BizInc',
+            budget: '$50k',
+            score: 40,
           },
         ],
       },
@@ -62,7 +66,7 @@ async function main() {
     const account = await prisma.account.create({
       data: {
         name: companyName,
-        email: faker.internet.email({ firstName, provider: companyName.toLowerCase().replace(/[^a-z]/g, '') + '.com' }),
+        email: faker.internet.email({ firstName, provider: companyName.toLowerCase().replace(/[^a-z]/g, '') + '.com' }).toLowerCase(),
         passwordHash,
       },
     });
@@ -78,8 +82,10 @@ async function main() {
         email: faker.internet.email(),
         phone: faker.phone.number(),
         company: faker.company.name(),
+        budget: `$${faker.number.int({ min: 10, max: 500 })}k`,
+        score: faker.number.int({ min: 0, max: 100 }),
         source: faker.helpers.arrayElement(['website', 'linkedin', 'referral', 'cold_call', 'ad_campaign']),
-        status: faker.helpers.arrayElement(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed', 'lost']),
+        status: faker.helpers.arrayElement(['NEW_LEAD', 'IN_QUALIFICATION', 'QUALIFIED', 'MEETING_BOOKED', 'NOT_QUALIFIED']),
         accountId: account.id,
       });
     }

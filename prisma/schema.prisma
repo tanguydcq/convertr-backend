@@ -41,8 +41,10 @@ model Lead {
   email     String
   phone     String?
   company   String?
+  budget    String?
+  score     Int      @default(0)
   source    String   @default("manual")
-  status    String   @default("new")
+  status    String   @default("NEW_LEAD")
   accountId String   @map("account_id") @db.Uuid
   account   Account  @relation(fields: [accountId], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
