@@ -1,24 +1,24 @@
-import { Request, Response, NextFunction } from 'express';
-import { Role } from '@prisma/client';
+import { FastifyRequest, FastifyReply } from 'fastify';
 
+type Role = 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'CLIENT_USER';
+
+/**
+ * Creates a Fastify preHandler hook for role-based authorization
+ */
 export function authorize(...allowedRoles: Role[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (!request.user) {
+      return reply.status(401).send({
         error: 'Unauthorized',
         message: 'User not authenticated',
       });
-      return;
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({
+    if (!allowedRoles.includes(request.user.role as Role)) {
+      return reply.status(403).send({
         error: 'Forbidden',
         message: `Access denied. Required roles: ${allowedRoles.join(', ')}`,
       });
-      return;
     }
-
-    next();
   };
 }

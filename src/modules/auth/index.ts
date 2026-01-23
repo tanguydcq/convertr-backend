@@ -1,3 +1,2 @@
-export { default as authRoutes } from './auth.routes';
-export { authService, AuthError } from './auth.service';
-export * from './auth.validation';
+export { authRoutes } from './auth.routes.js';
+export { authService, AuthError, type TokenPair, type AuthenticatedUser } from './auth.service.js';

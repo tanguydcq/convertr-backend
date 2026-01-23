@@ -1,29 +1,35 @@
-import { Request, Response, NextFunction } from 'express';
+// Error handling is now done in app.ts using Fastify's built-in error handler
+// This file is kept for backwards compatibility and custom error types
+
 import { ZodError } from 'zod';
-import { config } from '../config';
+import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
+import { config } from '../config/index.js';
 
 export interface AppError extends Error {
   statusCode?: number;
   code?: string;
 }
 
+/**
+ * Fastify error handler
+ * Handles ZodError, Prisma errors, and generic errors
+ */
 export function errorHandler(
-  err: AppError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
+  error: FastifyError | AppError | ZodError,
+  request: FastifyRequest,
+  reply: FastifyReply
 ): void {
   // Log error in development
   if (config.NODE_ENV === 'development') {
-    console.error('Error:', err);
+    request.log.error(error);
   }
 
   // Handle Zod validation errors
-  if (err instanceof ZodError) {
-    res.status(400).json({
+  if (error instanceof ZodError) {
+    reply.status(400).send({
       error: 'Validation Error',
       message: 'Invalid request data',
-      details: err.errors.map((e) => ({
+      details: error.errors.map((e) => ({
         field: e.path.join('.'),
         message: e.message,
       })),
@@ -31,32 +37,34 @@ export function errorHandler(
     return;
   }
 
+  const appError = error as AppError;
+
   // Handle known errors with status codes
-  if (err.statusCode) {
-    res.status(err.statusCode).json({
-      error: err.name || 'Error',
-      message: err.message,
+  if (appError.statusCode) {
+    reply.status(appError.statusCode).send({
+      error: appError.name || 'Error',
+      message: appError.message,
     });
     return;
   }
 
   // Handle Prisma errors
-  if (err.code?.startsWith('P')) {
-    switch (err.code) {
+  if (appError.code?.startsWith('P')) {
+    switch (appError.code) {
       case 'P2002':
-        res.status(409).json({
+        reply.status(409).send({
           error: 'Conflict',
           message: 'A record with this value already exists',
         });
         return;
       case 'P2025':
-        res.status(404).json({
+        reply.status(404).send({
           error: 'Not Found',
           message: 'Record not found',
         });
         return;
       default:
-        res.status(500).json({
+        reply.status(500).send({
           error: 'Database Error',
           message: 'A database error occurred',
         });
@@ -65,17 +73,19 @@ export function errorHandler(
   }
 
   // Default to 500 for unknown errors
-  res.status(500).json({
+  reply.status(500).send({
     error: 'Internal Server Error',
-    message: config.NODE_ENV === 'production' 
-      ? 'An unexpected error occurred' 
-      : err.message,
+    message: config.NODE_ENV === 'production'
+      ? 'An unexpected error occurred'
+      : appError.message,
   });
 }
 
-export function notFoundHandler(_req: Request, res: Response): void {
-  res.status(404).json({
-    error: 'Not Found',
-    message: 'The requested resource was not found',
-  });
+/**
+ * Create a custom error with status code
+ */
+export function createError(statusCode: number, message: string): AppError {
+  const error = new Error(message) as AppError;
+  error.statusCode = statusCode;
+  return error;
 }

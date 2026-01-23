@@ -3,11 +3,11 @@
  * Business logic for Meta Ads integration
  */
 
-import { MetaClient } from './meta.client';
-import { mapMetaLeadsToPrismaInputs, mapMetaLeadToInternal } from './meta.mapper';
-import { MetaApiConfig, MetaAdAccount, MetaLeadGenForm, MetaLeadInternal } from './meta.types';
-import { SyncResult, IntegrationApiError } from '../types';
-import prisma from '../../lib/prisma';
+import { MetaClient } from './meta.client.js';
+import { mapMetaLeadsToPrismaInputs, mapMetaLeadToInternal } from './meta.mapper.js';
+import { MetaApiConfig, MetaAdAccount, MetaLeadGenForm, MetaLeadInternal } from './meta.types.js';
+import { SyncResult, IntegrationApiError } from '../types.js';
+import prisma from '../../lib/prisma.js';
 
 export class MetaService {
     private client: MetaClient | null = null;

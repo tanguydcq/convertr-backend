@@ -89,6 +89,9 @@ export interface MetaLeadFieldData {
     values: string[];
 }
 
+// Type alias for use in mapper
+export type MetaFieldData = MetaLeadFieldData;
+
 // ============================================================================
 // Lead Form Types
 // ============================================================================

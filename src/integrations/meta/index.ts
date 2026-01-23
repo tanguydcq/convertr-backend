@@ -2,13 +2,13 @@
  * Meta Ads Integration Module
  */
 
-export { MetaClient } from './meta.client';
-export { MetaService, metaService } from './meta.service';
+export { MetaClient } from './meta.client.js';
+export { MetaService, metaService } from './meta.service.js';
 export {
     mapMetaLeadToInternal,
     mapMetaLeadToPrismaInput,
     mapMetaLeadsToPrismaInputs,
-} from './meta.mapper';
+} from './meta.mapper.js';
 export type {
     MetaApiConfig,
     MetaAdAccount,
@@ -16,4 +16,4 @@ export type {
     MetaLead,
     MetaLeadGenForm,
     MetaLeadInternal,
-} from './meta.types';
+} from './meta.types.js';

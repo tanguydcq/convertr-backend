@@ -3,7 +3,7 @@
  * Transforms Retell API responses to internal domain models
  */
 
-import { RetellCall, RetellCallInternal } from './retell.types';
+import { RetellCall, RetellCallInternal } from './retell.types.js';
 
 /**
  * Map call status from Retell to internal representation

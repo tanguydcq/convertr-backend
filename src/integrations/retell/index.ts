@@ -2,9 +2,9 @@
  * Retell AI Integration Module
  */
 
-export { RetellClient } from './retell.client';
-export { RetellService, retellService } from './retell.service';
-export { mapRetellCallToInternal, mapRetellCallsToInternal } from './retell.mapper';
+export { RetellClient } from './retell.client.js';
+export { RetellService, retellService } from './retell.service.js';
+export { mapRetellCallToInternal, mapRetellCallsToInternal } from './retell.mapper.js';
 export type {
     RetellApiConfig,
     RetellAgent,
@@ -14,4 +14,4 @@ export type {
     RetellPhoneCallInput,
     RetellWebCallInput,
     RetellWebhookPayload,
-} from './retell.types';
+} from './retell.types.js';

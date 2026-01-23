@@ -1,28 +1,25 @@
-import { Request, Response, NextFunction } from 'express';
-import { usersService } from './users.service';
+import { FastifyRequest, FastifyReply } from 'fastify';
+import { usersService } from './users.service.js';
 
-export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const profile = await usersService.getProfile(req.user.userId);
-
-    if (!profile) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
-      });
-      return;
-    }
-
-    res.status(200).json(profile);
-  } catch (error) {
-    next(error);
+export async function getMe(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  if (!request.user) {
+    return reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'User not authenticated',
+    });
   }
+
+  const profile = await usersService.getProfile(request.user.userId);
+
+  if (!profile) {
+    return reply.status(404).send({
+      error: 'Not Found',
+      message: 'User not found',
+    });
+  }
+
+  reply.status(200).send(profile);
 }

@@ -13,7 +13,7 @@
  *
  * Usage:
  * ```typescript
- * import { metaService, retellService } from '../integrations';
+ * import { metaService, retellService } from '../integrations/index.js';
  *
  * // In your business service
  * const leads = await metaService.syncLeadsFromForm(tenantId, formId);
@@ -28,7 +28,7 @@ export {
     SyncError,
     IntegrationConfig,
     IntegrationApiError,
-} from './types';
+} from './types.js';
 
 // Meta Ads Integration
 export {
@@ -38,7 +38,7 @@ export {
     mapMetaLeadToInternal,
     mapMetaLeadToPrismaInput,
     mapMetaLeadsToPrismaInputs,
-} from './meta';
+} from './meta/index.js';
 export type {
     MetaApiConfig,
     MetaAdAccount,
@@ -46,7 +46,7 @@ export type {
     MetaLead,
     MetaLeadGenForm,
     MetaLeadInternal,
-} from './meta';
+} from './meta/index.js';
 
 // Retell AI Integration
 export {
@@ -55,7 +55,7 @@ export {
     RetellClient,
     mapRetellCallToInternal,
     mapRetellCallsToInternal,
-} from './retell';
+} from './retell/index.js';
 export type {
     RetellApiConfig,
     RetellAgent,
@@ -65,4 +65,4 @@ export type {
     RetellPhoneCallInput,
     RetellWebCallInput,
     RetellWebhookPayload,
-} from './retell';
+} from './retell/index.js';

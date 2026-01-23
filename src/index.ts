@@ -1,22 +1,28 @@
-import './types/express.d.ts';
-import { createApp } from './app';
-import { config } from './config';
-import prisma from './lib/prisma';
-
-const app = createApp();
+import 'dotenv/config';
+import { buildApp } from './app.js';
+import { config } from './config/index.js';
+import prisma from './lib/prisma.js';
+import { redis } from './lib/redis.js';
 
 async function main() {
   try {
+    const app = await buildApp();
+
     // Test database connection
     await prisma.$connect();
-    console.log('✓ Database connected');
+    console.log('✓ PostgreSQL connected');
+
+    // Test Redis connection
+    await redis.connect();
+    await redis.ping();
+    console.log('✓ Redis connected');
 
     // Start server
-    app.listen(config.PORT, () => {
-      console.log(`\n🚀 Convertr Backend running on http://localhost:${config.PORT}`);
-      console.log(`   Environment: ${config.NODE_ENV}`);
-      console.log(`   Health check: http://localhost:${config.PORT}/health\n`);
-    });
+    await app.listen({ port: config.PORT, host: '0.0.0.0' });
+
+    console.log(`\n🚀 Convertr Backend v2.0.0 running on http://localhost:${config.PORT}`);
+    console.log(`   Environment: ${config.NODE_ENV}`);
+    console.log(`   Health check: http://localhost:${config.PORT}/health\n`);
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -24,16 +30,24 @@ async function main() {
 }
 
 // Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+async function shutdown(signal: string) {
+  console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
 
-process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+  try {
+    await prisma.$disconnect();
+    console.log('✓ PostgreSQL disconnected');
+
+    await redis.quit();
+    console.log('✓ Redis disconnected');
+
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 main();

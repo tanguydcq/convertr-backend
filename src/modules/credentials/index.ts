@@ -1,7 +1,7 @@
 /**
  * Credentials module exports
  */
-export { credentialsService, CredentialsError } from './credentials.service';
+export { credentialsService, CredentialsError } from './credentials.service.js';
 export type {
     Provider,
     ProviderSecrets,
@@ -10,4 +10,4 @@ export type {
     RetellAISecrets,
     DecryptedCredential,
     SaveCredentialsInput,
-} from './credentials.types';
+} from './credentials.types.js';

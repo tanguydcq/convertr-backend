@@ -3,15 +3,15 @@
  * Business logic for Retell AI integration
  */
 
-import { RetellClient } from './retell.client';
-import { mapRetellCallToInternal, mapRetellCallsToInternal } from './retell.mapper';
+import { RetellClient } from './retell.client.js';
+import { mapRetellCallToInternal, mapRetellCallsToInternal } from './retell.mapper.js';
 import {
     RetellApiConfig,
     RetellAgent,
     RetellAgentCreateInput,
     RetellCallInternal,
     RetellPhoneCallInput,
-} from './retell.types';
+} from './retell.types.js';
 
 export class RetellService {
     private client: RetellClient | null = null;

@@ -1,48 +1,97 @@
-import express, { Express } from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import { authRoutes } from './modules/auth';
-import { usersRoutes } from './modules/users';
-import { leadsRoutes } from './modules/leads';
-import { adminRoutes } from './modules/admin';
-import { errorHandler, notFoundHandler, apiRateLimiter } from './middleware';
+import Fastify, { FastifyInstance, FastifyError } from 'fastify';
+import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
+import { config } from './config/index.js';
+import { authRoutes } from './modules/auth/index.js';
+import { usersRoutes } from './modules/users/index.js';
+import { leadsRoutes } from './modules/leads/index.js';
+import { adminRoutes } from './modules/admin/index.js';
 
-export function createApp(): Express {
-  const app = express();
+// Extend Fastify types
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: {
+      userId: string;
+      role: string;
+      tenantId?: string;
+    };
+  }
+}
 
-  // Basic middleware
-  app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+export async function buildApp(): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: config.NODE_ENV === 'development' ? {
+      transport: {
+        target: 'pino-pretty',
+        options: { colorize: true }
+      }
+    } : true,
+    ajv: {
+      customOptions: {
+        strict: 'log',
+        keywords: ['kind', 'modifier'],
+      },
+    },
+  });
+
+  // Register CORS
+  await app.register(cors, {
+    origin: config.CORS_ORIGIN,
     credentials: true,
-  }));
-  app.use(express.json());
-  app.use(cookieParser());
+  });
 
-  // Apply general rate limiting to all routes
-  app.use(apiRateLimiter);
+  // Register cookie parser
+  await app.register(cookie);
+
+  // Register rate limiter
+  await app.register(rateLimit, {
+    max: config.RATE_LIMIT_MAX_REQUESTS,
+    timeWindow: config.RATE_LIMIT_WINDOW_MS,
+    errorResponseBuilder: () => ({
+      error: 'Too Many Requests',
+      message: 'Rate limit exceeded. Please try again later.',
+    }),
+  });
 
   // Health check endpoint
-  app.get('/health', (_req, res) => {
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
+  app.get('/health', async () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0',
+  }));
+
+  // API Routes
+  await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(usersRoutes, { prefix: '/api' });
+  await app.register(leadsRoutes, { prefix: '/api/leads' });
+  await app.register(adminRoutes, { prefix: '/api/admin' });
+
+  // Global error handler
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const statusCode = error.statusCode || 500;
+
+    // Log server errors
+    if (statusCode >= 500) {
+      request.log.error(error);
+    }
+
+    reply.status(statusCode).send({
+      error: error.name || 'Internal Server Error',
+      message: error.message || 'An unexpected error occurred',
+      ...(config.NODE_ENV === 'development' && { stack: error.stack }),
     });
   });
 
-  // API Routes
-  const apiRouter = express.Router();
-  apiRouter.use('/auth', authRoutes);
-  apiRouter.use('/', usersRoutes); // /me
-  apiRouter.use('/leads', leadsRoutes);
-  apiRouter.use('/admin', adminRoutes);
-
-  app.use('/api', apiRouter);
-
-  // Error handling
-  app.use(notFoundHandler);
-  app.use(errorHandler);
+  // 404 handler
+  app.setNotFoundHandler((request, reply) => {
+    reply.status(404).send({
+      error: 'Not Found',
+      message: `Route ${request.method} ${request.url} not found`,
+    });
+  });
 
   return app;
 }
 
-export default createApp;
+export default buildApp;

@@ -1,13 +1,98 @@
-import { Router } from 'express';
-import { getLeads, getLeadById } from './leads.controller';
-import { authenticate, tenantGuard } from '../../middleware';
+import { FastifyPluginAsync } from 'fastify';
+import { getLeads, getLeadById, createLead } from './leads.controller.js';
+import { authenticate, tenantGuard } from '../../middleware/index.js';
 
-const router = Router();
+export const leadsRoutes: FastifyPluginAsync = async (app) => {
+    // GET /api/leads - Get all leads for the tenant (paginated)
+    app.get<{ Querystring: { page?: string; limit?: string } }>('/', {
+        preHandler: [authenticate, tenantGuard],
+        schema: {
+            querystring: {
+                type: 'object',
+                properties: {
+                    page: { type: 'string' },
+                    limit: { type: 'string' },
+                },
+            },
+            response: {
+                200: {
+                    type: 'object',
+                    properties: {
+                        leads: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'string' },
+                                    firstName: { type: 'string' },
+                                    lastName: { type: 'string' },
+                                    email: { type: 'string' },
+                                    phone: { type: ['string', 'null'] },
+                                    company: { type: ['string', 'null'] },
+                                    source: { type: 'string' },
+                                    status: { type: 'string' },
+                                    createdAt: { type: 'string' },
+                                },
+                            },
+                        },
+                        total: { type: 'integer' },
+                        page: { type: 'integer' },
+                        limit: { type: 'integer' },
+                        hasMore: { type: 'boolean' },
+                    },
+                },
+            },
+        },
+    }, getLeads as any);
 
-// GET /leads - Get all leads for the tenant
-router.get('/', authenticate, tenantGuard, getLeads);
+    // GET /api/leads/:id - Get a specific lead
+    app.get<{ Params: { id: string } }>('/:id', {
+        preHandler: [authenticate, tenantGuard],
+        schema: {
+            params: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                    id: { type: 'string' },
+                },
+            },
+        },
+    }, getLeadById);
 
-// GET /leads/:id - Get a specific lead
-router.get('/:id', authenticate, tenantGuard, getLeadById);
+    // POST /api/leads - Create a new lead
+    app.post('/', {
+        preHandler: [authenticate, tenantGuard],
+        schema: {
+            body: {
+                type: 'object',
+                required: ['firstName', 'lastName', 'email'],
+                properties: {
+                    firstName: { type: 'string', minLength: 1 },
+                    lastName: { type: 'string', minLength: 1 },
+                    email: { type: 'string', format: 'email' },
+                    phone: { type: 'string' },
+                    company: { type: 'string' },
+                    source: { type: 'string', default: 'manual' },
+                },
+            },
+            response: {
+                201: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string' },
+                        firstName: { type: 'string' },
+                        lastName: { type: 'string' },
+                        email: { type: 'string' },
+                        phone: { type: ['string', 'null'] },
+                        company: { type: ['string', 'null'] },
+                        source: { type: 'string' },
+                        status: { type: 'string' },
+                        createdAt: { type: 'string' },
+                    },
+                },
+            },
+        },
+    }, createLead as any);
+};
 
-export default router;
+export default leadsRoutes;

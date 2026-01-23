@@ -15,7 +15,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { config } from '../config';
+import { config } from '../config/index.js';
 
 const ALGORITHM = 'aes-256-gcm' as const;
 const IV_LENGTH = 12; // NIST recommendation for GCM

@@ -10,8 +10,8 @@ import {
     RetellCall,
     RetellPhoneCallInput,
     RetellWebCallInput,
-} from './retell.types';
-import { IntegrationApiError } from '../types';
+} from './retell.types.js';
+import { IntegrationApiError } from '../types.js';
 
 const RETELL_API_BASE_URL = 'https://api.retellai.com';
 
@@ -173,4 +173,3 @@ export class RetellClient {
         return json as T;
     }
 }
-

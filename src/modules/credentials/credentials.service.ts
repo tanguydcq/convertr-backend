@@ -10,13 +10,13 @@
  * - Supports credential rotation with audit trail
  */
 
-import prisma from '../../lib/prisma';
-import { encrypt, decryptAs } from '../../lib/crypto';
+import prisma from '../../lib/prisma.js';
+import { encrypt, decryptAs } from '../../lib/crypto.js';
 import {
     Provider,
     ProviderSecretsMap,
     DecryptedCredential,
-} from './credentials.types';
+} from './credentials.types.js';
 
 /**
  * Error thrown when credential operations fail

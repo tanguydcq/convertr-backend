@@ -1,2 +1,2 @@
-export { default as usersRoutes } from './users.routes';
-export { usersService } from './users.service';
+export { usersRoutes } from './users.routes.js';
+export { usersService, type UserProfile } from './users.service.js';

@@ -4,14 +4,14 @@
  */
 
 import { Prisma } from '@prisma/client';
-import { MetaLead, MetaLeadInternal } from './meta.types';
+import { MetaLead, MetaLeadInternal, MetaFieldData } from './meta.types.js';
 
 /**
  * Extract a field value from Meta lead field_data array
  */
-function extractField(fieldData: MetaLead['field_data'], ...fieldNames: string[]): string | null {
+function extractField(fieldData: MetaFieldData[], ...fieldNames: string[]): string | null {
     for (const name of fieldNames) {
-        const field = fieldData.find((f) => f.name.toLowerCase() === name.toLowerCase());
+        const field = fieldData.find((f: MetaFieldData) => f.name.toLowerCase() === name.toLowerCase());
         if (field && field.values.length > 0 && field.values[0]) {
             return field.values[0];
         }
@@ -22,9 +22,9 @@ function extractField(fieldData: MetaLead['field_data'], ...fieldNames: string[]
 /**
  * Convert all field_data to a flat object
  */
-function fieldDataToRecord(fieldData: MetaLead['field_data']): Record<string, string> {
+function fieldDataToRecord(fieldData: MetaFieldData[]): Record<string, string> {
     return fieldData.reduce(
-        (acc, field) => {
+        (acc: Record<string, string>, field: MetaFieldData) => {
             if (field.values.length > 0) {
                 acc[field.name] = field.values[0];
             }
@@ -69,17 +69,20 @@ export function mapMetaLeadToPrismaInput(
 ): Prisma.LeadCreateInput {
     const internal = mapMetaLeadToInternal(metaLead);
 
+    // Split name into firstName and lastName
+    const nameParts = internal.name.split(' ');
+    const firstName = nameParts[0] || 'Unknown';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     return {
         tenant: { connect: { id: tenantId } },
-        name: internal.name,
+        firstName,
+        lastName,
         email: internal.email,
         phone: internal.phone,
         company: internal.company,
-        status: 'NEW',
-        // Note: You may want to add these fields to your Prisma schema:
-        // source: 'META_ADS',
-        // externalId: internal.externalId,
-        // metadata: internal.rawFields,
+        source: 'meta',
+        status: 'new',
     };
 }
 

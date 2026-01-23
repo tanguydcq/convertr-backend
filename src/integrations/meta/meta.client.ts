@@ -11,8 +11,8 @@ import {
     MetaLead,
     MetaLeadGenForm,
     MetaApiErrorResponse,
-} from './meta.types';
-import { IntegrationApiError } from '../types';
+} from './meta.types.js';
+import { IntegrationApiError } from '../types.js';
 
 const META_GRAPH_API_VERSION = 'v19.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
@@ -152,4 +152,3 @@ export class MetaClient {
         return { data: json.data as T, paging: json.paging };
     }
 }
-

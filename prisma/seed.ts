@@ -1,7 +1,19 @@
 import { PrismaClient } from '@prisma/client';
-import { hashPassword } from '../src/lib/password';
+import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
+
+/**
+ * Hash a password using Argon2id (same config as src/lib/password.ts)
+ */
+async function hashPassword(password: string): Promise<string> {
+  return argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+  });
+}
 
 async function main() {
   console.log('🌱 Starting database seed...');
@@ -9,6 +21,7 @@ async function main() {
   // Clean existing data
   await prisma.refreshToken.deleteMany();
   await prisma.lead.deleteMany();
+  await prisma.externalCredential.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 
@@ -64,26 +77,32 @@ async function main() {
   const leads = await prisma.lead.createMany({
     data: [
       {
-        name: 'John Doe',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         company: 'TechCorp',
         phone: '+1-555-0101',
+        source: 'manual',
         status: 'new',
         tenantId: tenant.id,
       },
       {
-        name: 'Jane Smith',
+        firstName: 'Jane',
+        lastName: 'Smith',
         email: 'jane.smith@example.com',
         company: 'StartupXYZ',
         phone: '+1-555-0102',
+        source: 'meta',
         status: 'contacted',
         tenantId: tenant.id,
       },
       {
-        name: 'Bob Johnson',
+        firstName: 'Bob',
+        lastName: 'Johnson',
         email: 'bob.johnson@example.com',
         company: 'Enterprise Ltd',
         phone: '+1-555-0103',
+        source: 'api',
         status: 'qualified',
         tenantId: tenant.id,
       },

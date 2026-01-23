@@ -1,2 +1,2 @@
-export { default as leadsRoutes } from './leads.routes';
-export { leadsService } from './leads.service';
+export { leadsRoutes } from './leads.routes.js';
+export { leadsService, type LeadDTO } from './leads.service.js';

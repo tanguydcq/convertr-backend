@@ -1,35 +1,33 @@
-import rateLimit from 'express-rate-limit';
-import { config } from '../config';
+// Rate limiting is now configured directly in app.ts using @fastify/rate-limit
+// This file provides auth-specific rate limit config
+
+import { config } from '../config/index.js';
 
 /**
- * Rate limiter specifically for authentication endpoints.
- * Prevents brute force attacks on login.
+ * Auth rate limit configuration
+ * Used for login/register endpoints to prevent brute force attacks
  */
-export const authRateLimiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW_MS, // 15 minutes by default
-  max: config.RATE_LIMIT_MAX_REQUESTS, // 5 requests by default
-  message: {
+export const authRateLimitConfig = {
+  max: config.RATE_LIMIT_MAX_REQUESTS,
+  timeWindow: config.RATE_LIMIT_WINDOW_MS,
+  errorResponseBuilder: () => ({
     error: 'Too Many Requests',
     message: 'Too many login attempts. Please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Skip rate limiting in test and development environment
-  skip: () => config.NODE_ENV === 'test' || config.NODE_ENV === 'development',
-});
+  }),
+  // Skip rate limiting in test environment
+  skip: () => config.NODE_ENV === 'test',
+};
 
 /**
- * General API rate limiter.
- * More permissive than auth limiter.
+ * API rate limit configuration
+ * More permissive than auth limiter
  */
-export const apiRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
-  message: {
+export const apiRateLimitConfig = {
+  max: 100,
+  timeWindow: 60 * 1000, // 1 minute
+  errorResponseBuilder: () => ({
     error: 'Too Many Requests',
     message: 'Too many requests. Please slow down.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
+  }),
   skip: () => config.NODE_ENV === 'test',
-});
+};

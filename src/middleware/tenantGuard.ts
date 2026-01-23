@@ -1,61 +1,68 @@
-import { Request, Response, NextFunction } from 'express';
+import { FastifyRequest, FastifyReply } from 'fastify';
 
 /**
- * Middleware to ensure request is scoped to current user's tenant
+ * Fastify preHandler hook to ensure request is scoped to current user's tenant
  */
-export const tenantGuard = (req: Request, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  // SUPER_ADMIN can access everything
-  if (req.user.role === 'SUPER_ADMIN') {
-    return next();
-  }
-
-  // Check if user has a tenant
-  if (!req.user.tenantId) {
-    return res.status(403).json({
-      message: 'User does not belong to any tenant'
+export async function tenantGuard(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  if (!request.user) {
+    return reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'User not authenticated'
     });
   }
 
-  // If request has tenantId param, verify match
-  const { tenantId } = req.params;
-  if (tenantId && tenantId !== req.user.tenantId) {
-    // EXCEPT if SUPER_ADMIN
-    if (req.user.role === 'SUPER_ADMIN') return next();
+  // SUPER_ADMIN can access everything
+  if (request.user.role === 'SUPER_ADMIN') {
+    return;
+  }
 
-    return res.status(403).json({
-      message: 'Access denied to this tenant'
+  // Check if user has a tenant
+  if (!request.user.tenantId) {
+    return reply.status(403).send({
+      error: 'Forbidden',
+      message: 'User does not belong to any tenant',
+    });
+  }
+
+  // Get tenantId from params
+  const params = request.params as { tenantId?: string };
+  const tenantId = params.tenantId;
+
+  if (tenantId && tenantId !== request.user.tenantId) {
+    return reply.status(403).send({
+      error: 'Forbidden',
+      message: 'Access denied to this tenant',
     });
   }
 
   // Also check body tenantId if present
-  if (req.body.tenantId && req.body.tenantId !== req.user.tenantId) {
-    if (req.user.role === 'SUPER_ADMIN') return next();
-
-    return res.status(403).json({
-      message: 'Cannot modify resources of another tenant'
+  const body = request.body as { tenantId?: string } | undefined;
+  if (body?.tenantId && body.tenantId !== request.user.tenantId) {
+    return reply.status(403).send({
+      error: 'Forbidden',
+      message: 'Cannot modify resources of another tenant',
     });
   }
-
-  next();
-};
+}
 
 /**
  * Helper to get tenant ID from request.
  * For SUPER_ADMIN, uses the requested tenant or null.
  * For other users, always uses their own tenant.
  */
-export function getTenantIdFromRequest(req: Request): string | null {
-  if (!req.user) {
+export function getTenantIdFromRequest(request: FastifyRequest): string | null {
+  if (!request.user) {
     return null;
   }
 
-  if (req.user.role === 'SUPER_ADMIN') {
-    return req.params.tenantId || req.query.tenantId as string || null;
+  if (request.user.role === 'SUPER_ADMIN') {
+    const params = request.params as { tenantId?: string };
+    const query = request.query as { tenantId?: string };
+    return params.tenantId || query.tenantId || null;
   }
 
-  return req.user.tenantId;
+  return request.user.tenantId || null;
 }

@@ -1,3 +1,2 @@
-export { default as adminRoutes } from './admin.routes';
-export { adminService } from './admin.service';
-export * from './admin.validation';
+export { adminRoutes } from './admin.routes.js';
+export { adminService, type TenantDTO } from './admin.service.js';

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
@@ -36,14 +36,13 @@ export async function setupTestData(): Promise<TestData> {
     data: { name: 'Test Tenant 2' },
   });
 
-  const saltRounds = 10;
 
   // Create SUPER_ADMIN
   const superAdminPassword = 'SuperAdmin123!';
   const superAdmin = await prisma.user.create({
     data: {
       email: 'super@test.com',
-      passwordHash: await bcrypt.hash(superAdminPassword, saltRounds),
+      passwordHash: await argon2.hash(superAdminPassword),
       role: 'SUPER_ADMIN',
       tenantId: null,
     },
@@ -54,7 +53,7 @@ export async function setupTestData(): Promise<TestData> {
   const clientAdmin = await prisma.user.create({
     data: {
       email: 'admin@test.com',
-      passwordHash: await bcrypt.hash(clientAdminPassword, saltRounds),
+      passwordHash: await argon2.hash(clientAdminPassword),
       role: 'CLIENT_ADMIN',
       tenantId: tenant.id,
     },
@@ -65,7 +64,7 @@ export async function setupTestData(): Promise<TestData> {
   const clientUser = await prisma.user.create({
     data: {
       email: 'user@test.com',
-      passwordHash: await bcrypt.hash(clientUserPassword, saltRounds),
+      passwordHash: await argon2.hash(clientUserPassword),
       role: 'CLIENT_USER',
       tenantId: tenant.id,
     },
@@ -76,7 +75,7 @@ export async function setupTestData(): Promise<TestData> {
   const otherTenantUser = await prisma.user.create({
     data: {
       email: 'other@test.com',
-      passwordHash: await bcrypt.hash(otherTenantUserPassword, saltRounds),
+      passwordHash: await argon2.hash(otherTenantUserPassword),
       role: 'CLIENT_USER',
       tenantId: tenant2.id,
     },
@@ -85,15 +84,15 @@ export async function setupTestData(): Promise<TestData> {
   // Create sample leads for tenant 1
   await prisma.lead.createMany({
     data: [
-      { name: 'Lead 1', email: 'lead1@test.com', tenantId: tenant.id },
-      { name: 'Lead 2', email: 'lead2@test.com', tenantId: tenant.id },
+      { firstName: 'Lead', lastName: 'One', email: 'lead1@test.com', tenantId: tenant.id },
+      { firstName: 'Lead', lastName: 'Two', email: 'lead2@test.com', tenantId: tenant.id },
     ],
   });
 
   // Create sample leads for tenant 2
   await prisma.lead.createMany({
     data: [
-      { name: 'Lead 3', email: 'lead3@test.com', tenantId: tenant2.id },
+      { firstName: 'Lead', lastName: 'Three', email: 'lead3@test.com', tenantId: tenant2.id },
     ],
   });
 

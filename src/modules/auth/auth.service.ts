@@ -1,8 +1,8 @@
 import { randomBytes } from 'crypto';
-import prisma from '../../lib/prisma';
-import { verifyPassword } from '../../lib/password';
-import { generateAccessToken, getTokenExpirationDate, JwtPayload } from '../../lib/jwt';
-import { config } from '../../config';
+import prisma from '../../lib/prisma.js';
+import { verifyPassword } from '../../lib/password.js';
+import { generateAccessToken, getTokenExpirationDate, JwtPayload } from '../../lib/jwt.js';
+import { config } from '../../config/index.js';
 import { User } from '@prisma/client';
 
 export interface TokenPair {
@@ -118,7 +118,7 @@ class AuthService {
     };
 
     const accessToken = generateAccessToken(payload);
-    
+
     // Generate a secure random refresh token
     const refreshTokenValue = randomBytes(64).toString('hex');
     const expiresAt = getTokenExpirationDate(config.REFRESH_TOKEN_EXPIRES_IN);
