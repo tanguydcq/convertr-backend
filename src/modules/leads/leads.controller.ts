@@ -14,11 +14,13 @@ interface CreateLeadBody {
   email: string;
   phone?: string;
   company?: string;
-  budget?: string;
+  budget?: number;
   score?: number;
   source?: string;
   status?: string;
 }
+
+interface UpdateLeadBody extends Partial<CreateLeadBody> { }
 
 /**
  * GET /leads - List leads with pagination
@@ -102,4 +104,54 @@ export async function createLead(
   const lead = await leadsService.createLead(request.account.accountId, input);
 
   reply.status(201).send(lead);
+}
+
+/**
+ * PUT /leads/:id - Update an existing lead
+ */
+export async function updateLead(
+  request: FastifyRequest<{ Params: { id: string }; Body: UpdateLeadBody }>,
+  reply: FastifyReply
+): Promise<void> {
+  if (!request.account) {
+    return reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Not authenticated',
+    });
+  }
+
+  const { id } = request.params;
+
+
+  // Actually, let's just pass the body as partial since service UpdateLeadInput is partial CreateLeadInput
+  try {
+    const updatedLead = await leadsService.updateLead(request.account.accountId, id, request.body);
+    reply.send(updatedLead);
+  } catch (error) {
+    reply.status(404).send({ error: 'Not Found', message: 'Lead not found' });
+  }
+}
+
+/**
+ * DELETE /leads/:id - Delete a lead
+ */
+export async function deleteLead(
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  if (!request.account) {
+    return reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Not authenticated',
+    });
+  }
+
+  const { id } = request.params;
+
+  try {
+    await leadsService.deleteLead(request.account.accountId, id);
+    reply.status(204).send();
+  } catch (error) {
+    reply.status(404).send({ error: 'Not Found', message: 'Lead not found' });
+  }
 }

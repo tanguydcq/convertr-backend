@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { getLeads, getLeadById, createLead } from './leads.controller.js';
+import { getLeads, getLeadById, createLead, updateLead, deleteLead } from './leads.controller.js';
 import { authenticate } from '../../middleware/index.js';
 
 export const leadsRoutes: FastifyPluginAsync = async (app) => {
@@ -29,7 +29,7 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
                                     email: { type: 'string' },
                                     phone: { type: ['string', 'null'] },
                                     company: { type: ['string', 'null'] },
-                                    budget: { type: ['string', 'null'] },
+                                    budget: { type: ['integer', 'null'] },
                                     score: { type: 'integer' },
                                     source: { type: 'string' },
                                     status: { type: 'string' },
@@ -74,7 +74,7 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
                     email: { type: 'string', format: 'email' },
                     phone: { type: 'string' },
                     company: { type: 'string' },
-                    budget: { type: 'string' },
+                    budget: { type: 'integer', minimum: 0 },
                     score: { type: 'integer', minimum: 0, maximum: 100 },
                     status: { type: 'string' },
                     source: { type: 'string', default: 'manual' },
@@ -90,7 +90,7 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
                         email: { type: 'string' },
                         phone: { type: ['string', 'null'] },
                         company: { type: ['string', 'null'] },
-                        budget: { type: ['string', 'null'] },
+                        budget: { type: ['integer', 'null'] },
                         score: { type: 'integer' },
                         source: { type: 'string' },
                         status: { type: 'string' },
@@ -100,6 +100,71 @@ export const leadsRoutes: FastifyPluginAsync = async (app) => {
             },
         },
     }, createLead as any);
+
+    // PUT /api/leads/:id - Update a lead
+    app.put<{ Params: { id: string } }>('/:id', {
+        preHandler: [authenticate],
+        schema: {
+            params: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                    id: { type: 'string' },
+                },
+            },
+            body: {
+                type: 'object',
+                properties: {
+                    firstName: { type: 'string', minLength: 1 },
+                    lastName: { type: 'string', minLength: 1 },
+                    email: { type: 'string', format: 'email' },
+                    phone: { type: 'string' },
+                    company: { type: 'string' },
+                    budget: { type: 'integer', minimum: 0 },
+                    score: { type: 'integer', minimum: 0, maximum: 100 },
+                    status: { type: 'string' },
+                    source: { type: 'string' },
+                },
+            },
+            response: {
+                200: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string' },
+                        firstName: { type: 'string' },
+                        lastName: { type: 'string' },
+                        email: { type: 'string' },
+                        phone: { type: ['string', 'null'] },
+                        company: { type: ['string', 'null'] },
+                        budget: { type: ['integer', 'null'] },
+                        score: { type: 'integer' },
+                        source: { type: 'string' },
+                        status: { type: 'string' },
+                        createdAt: { type: 'string' },
+                    },
+                },
+            },
+        },
+    }, updateLead as any);
+
+    // DELETE /api/leads/:id - Delete a lead
+    app.delete<{ Params: { id: string } }>('/:id', {
+        preHandler: [authenticate],
+        schema: {
+            params: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                    id: { type: 'string' },
+                },
+            },
+            response: {
+                204: {
+                    type: 'null',
+                },
+            },
+        },
+    }, deleteLead as any);
 };
 
 export default leadsRoutes;

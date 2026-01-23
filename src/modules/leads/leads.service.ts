@@ -9,7 +9,7 @@ export interface LeadDTO {
   email: string;
   phone: string | null;
   company: string | null;
-  budget: string | null;
+  budget: number | null;
   score: number;
   source: string;
   status: string;
@@ -23,11 +23,14 @@ export interface CreateLeadInput {
   email: string;
   phone?: string;
   company?: string;
-  budget?: string;
+  budget?: number;
   score?: number;
   source?: string;
   status?: string;
 }
+
+// Input for updating a lead
+export interface UpdateLeadInput extends Partial<CreateLeadInput> { }
 
 // Pagination params
 export interface PaginationParams {
@@ -137,6 +140,51 @@ class LeadsService {
     });
 
     return this.toDTO(lead);
+  }
+
+  async updateLead(accountId: string, leadId: string, input: UpdateLeadInput): Promise<LeadDTO> {
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead || lead.accountId !== accountId) {
+      throw new Error('Lead not found');
+    }
+
+    console.log(`[Service] Updating lead ${leadId} for account ${accountId}`);
+    const updatedLead = await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        phone: input.phone,
+        company: input.company,
+        budget: input.budget,
+        score: input.score,
+        status: input.status,
+      },
+    });
+    console.log(`[Service] Update successful for lead ${leadId}`);
+
+    return this.toDTO(updatedLead);
+  }
+
+  async deleteLead(accountId: string, leadId: string): Promise<void> {
+    console.log(`[Service] Deleting lead ${leadId} for account ${accountId}`);
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+
+    if (!lead || lead.accountId !== accountId) {
+      console.error(`[Service] Delete failed: Lead not found or unauthorized. Lead: ${lead?.id}, Account: ${lead?.accountId} vs ${accountId}`);
+      throw new Error('Lead not found');
+    }
+
+    await prisma.lead.delete({
+      where: { id: leadId },
+    });
+    console.log(`[Service] Delete successful for lead ${leadId}`);
   }
 
   private toDTO(lead: Lead): LeadDTO {

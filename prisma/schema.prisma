@@ -41,7 +41,7 @@ model Lead {
   email     String
   phone     String?
   company   String?
-  budget    String?
+  budget    Int?
   score     Int      @default(0)
   source    String   @default("manual")
   status    String   @default("NEW_LEAD")
