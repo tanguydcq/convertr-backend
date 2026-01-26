@@ -37,6 +37,13 @@ export class MetaService {
     // ===========================================================================
 
     /**
+     * Check if account is connected
+     */
+    async isConnected(accountId: string): Promise<boolean> {
+        return credentialsService.hasCredentials(accountId, 'meta_ads');
+    }
+
+    /**
      * Exchange OAuth code for access token
      */
     async exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
@@ -59,6 +66,28 @@ export class MetaService {
         }
 
         return data.access_token;
+    }
+
+    /**
+     * Select an Ad Account for the integration
+     */
+    async selectAdAccount(accountId: string, adAccountId: string): Promise<void> {
+        const hasCreds = await credentialsService.hasCredentials(accountId, 'meta_ads');
+        if (!hasCreds) {
+            throw new Error('No Meta credentials found. Connect account first.');
+        }
+
+        const creds = await credentialsService.getCredentials(accountId, 'meta_ads');
+        if (!creds) {
+            throw new Error('Failed to retrieve credentials.');
+        }
+
+        const newSecrets = {
+            ...creds.secrets,
+            adAccountId,
+        };
+
+        await credentialsService.rotateCredentials(accountId, 'meta_ads', newSecrets);
     }
 
     /**
@@ -105,15 +134,15 @@ export class MetaService {
      * TODO: Implement actual storage (database table for integration configs)
      */
     async getConfigForAccount(accountId: string): Promise<MetaApiConfig | null> {
-        // Placeholder - in production, fetch from database
-        // Example:
-        // const config = await prisma.integrationConfig.findFirst({
-        //   where: { accountId, provider: 'META' },
-        // });
-        // return config ? { accessToken: config.accessToken } : null;
+        const creds = await credentialsService.getCredentials(accountId, 'meta_ads');
+        if (!creds) {
+            return null;
+        }
 
-        console.warn(`[MetaService] getConfigForAccount not implemented for account ${accountId}`);
-        return null;
+        return {
+            accessToken: creds.secrets.accessToken,
+            adAccountId: creds.secrets.adAccountId,
+        };
     }
 
     /**
