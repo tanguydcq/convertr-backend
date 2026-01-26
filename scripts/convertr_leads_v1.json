@@ -1,0 +1,33 @@
+{
+    "version": "v1",
+    "campaign": {
+        "objective": "OUTCOME_LEADS",
+        "special_ad_categories": [],
+        "budget_mode": "ABO",
+        "status": "PAUSED"
+    },
+    "adsets": [
+        {
+            "key": "broad",
+            "daily_budget": 2000,
+            "optimization_goal": "LEAD_GENERATION",
+            "billing_event": "IMPRESSIONS",
+            "targeting": {
+                "geo_locations": [
+                    "FR"
+                ],
+                "age_min": 25,
+                "age_max": 65
+            },
+            "status": "PAUSED"
+        }
+    ],
+    "ads": [
+        {
+            "key": "video_1",
+            "format": "VIDEO",
+            "cta": "SIGN_UP",
+            "status": "PAUSED"
+        }
+    ]
+}

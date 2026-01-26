@@ -8,6 +8,8 @@ import { mapMetaLeadsToPrismaInputs, mapMetaLeadToInternal } from './meta.mapper
 import { MetaApiConfig, MetaAdAccount, MetaLeadGenForm, MetaLeadInternal } from './meta.types.js';
 import { SyncResult, IntegrationApiError } from '../types.js';
 import prisma from '../../lib/prisma.js';
+import { config } from '../../config/index.js';
+import { credentialsService } from '../../modules/credentials/credentials.service.js';
 
 export class MetaService {
     private client: MetaClient | null = null;
@@ -28,6 +30,70 @@ export class MetaService {
             throw new Error('MetaService not initialized. Call initClient first.');
         }
         return this.client;
+    }
+
+    // ===========================================================================
+    // Authentication & Connection
+    // ===========================================================================
+
+    /**
+     * Exchange OAuth code for access token
+     */
+    async exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
+        if (!config.META_APP_ID || !config.META_APP_SECRET) {
+            throw new Error('Meta App ID and Secret are not configured');
+        }
+
+        const url = new URL('https://graph.facebook.com/v19.0/oauth/access_token');
+        url.searchParams.set('client_id', config.META_APP_ID);
+        url.searchParams.set('client_secret', config.META_APP_SECRET);
+        url.searchParams.set('redirect_uri', redirectUri);
+        url.searchParams.set('code', code);
+
+        const response = await fetch(url.toString());
+        const data = await response.json() as any;
+
+        if (data.error) {
+            console.error('Meta OAuth Error:', data.error);
+            throw new Error(data.error.message || 'Failed to exchange code for token');
+        }
+
+        return data.access_token;
+    }
+
+    /**
+     * Connect a Meta account
+     */
+    async connectAccount(accountId: string, code: string, redirectUri: string): Promise<void> {
+        // 1. Exchange code for short-lived token
+        let accessToken = await this.exchangeCodeForToken(code, redirectUri);
+
+        // 2. Exchange for long-lived token (optional but recommended)
+        if (config.META_APP_ID && config.META_APP_SECRET) {
+            const url = new URL('https://graph.facebook.com/v19.0/oauth/access_token');
+            url.searchParams.set('grant_type', 'fb_exchange_token');
+            url.searchParams.set('client_id', config.META_APP_ID);
+            url.searchParams.set('client_secret', config.META_APP_SECRET);
+            url.searchParams.set('fb_exchange_token', accessToken);
+
+            const response = await fetch(url.toString());
+            const data = await response.json() as any;
+
+            if (!data.error && data.access_token) {
+                accessToken = data.access_token;
+            }
+        }
+
+        // 3. Save credentials
+        // Use credentialsService to save/rotate
+        const hasCreds = await credentialsService.hasCredentials(accountId, 'meta_ads');
+        const secrets = { accessToken };
+
+        if (hasCreds) {
+            await credentialsService.rotateCredentials(accountId, 'meta_ads', secrets);
+        } else {
+            await credentialsService.saveCredentials(accountId, 'meta_ads', secrets);
+        }
     }
 
     // ===========================================================================

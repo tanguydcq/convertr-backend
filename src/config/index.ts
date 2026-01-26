@@ -14,6 +14,12 @@ const envSchema = z.object({
   S3_BUCKET: z.string().default('convertr-files'),
   S3_REGION: z.string().default('us-east-1'),
 
+  // Meta
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  META_REDIRECT_URI: z.string().optional(),
+  META_CONFIG_ID: z.string().optional(),
+
   // JWT
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('15m'),

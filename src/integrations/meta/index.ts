@@ -17,3 +17,5 @@ export type {
     MetaLeadGenForm,
     MetaLeadInternal,
 } from './meta.types.js';
+
+export { metaRoutes } from './meta.routes.js';

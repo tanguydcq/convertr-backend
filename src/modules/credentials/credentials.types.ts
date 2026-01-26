@@ -18,7 +18,7 @@ export interface MetaAdsSecrets {
     accessToken: string;
     refreshToken?: string;
     expiresAt?: string; // ISO 8601 date string
-    adAccountId: string;
+    adAccountId?: string;
 }
 
 /**

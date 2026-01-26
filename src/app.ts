@@ -1,4 +1,10 @@
 import Fastify, { FastifyInstance, FastifyError } from 'fastify';
+
+// ... (existing imports, but we need to add metaRoutes import at top and registration here)
+// Wait, I can't easily add import at top and code at bottom with one block if they are far apart.
+// I'll do two replaces or one multi_replace.
+// I'll use multi_replace.
+
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -6,6 +12,7 @@ import { config } from './config/index.js';
 import { authRoutes } from './modules/auth/index.js';
 import { leadsRoutes } from './modules/leads/index.js';
 import { adminRoutes } from './modules/admin/index.js';
+import { metaRoutes } from './integrations/meta/index.js';
 
 // Extend Fastify types (see src/types/fastify.d.ts)
 
@@ -55,6 +62,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(leadsRoutes, { prefix: '/api/leads' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(metaRoutes, { prefix: '/api/integrations/meta' });
 
   // Global error handler
   app.setErrorHandler((error: FastifyError, request, reply) => {
