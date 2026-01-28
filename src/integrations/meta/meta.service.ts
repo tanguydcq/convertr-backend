@@ -39,8 +39,8 @@ export class MetaService {
     /**
      * Check if account is connected
      */
-    async isConnected(accountId: string): Promise<boolean> {
-        return credentialsService.hasCredentials(accountId, 'meta_ads');
+    async isConnected(organisationId: string): Promise<boolean> {
+        return credentialsService.hasCredentials(organisationId, 'meta_ads');
     }
 
     /**
@@ -71,13 +71,13 @@ export class MetaService {
     /**
      * Select an Ad Account for the integration
      */
-    async selectAdAccount(accountId: string, adAccountId: string): Promise<void> {
-        const hasCreds = await credentialsService.hasCredentials(accountId, 'meta_ads');
+    async selectAdAccount(organisationId: string, adAccountId: string): Promise<void> {
+        const hasCreds = await credentialsService.hasCredentials(organisationId, 'meta_ads');
         if (!hasCreds) {
             throw new Error('No Meta credentials found. Connect account first.');
         }
 
-        const creds = await credentialsService.getCredentials(accountId, 'meta_ads');
+        const creds = await credentialsService.getCredentials(organisationId, 'meta_ads');
         if (!creds) {
             throw new Error('Failed to retrieve credentials.');
         }
@@ -87,13 +87,13 @@ export class MetaService {
             adAccountId,
         };
 
-        await credentialsService.rotateCredentials(accountId, 'meta_ads', newSecrets);
+        await credentialsService.rotateCredentials(organisationId, 'meta_ads', newSecrets);
     }
 
     /**
      * Connect a Meta account
      */
-    async connectAccount(accountId: string, code: string, redirectUri: string): Promise<void> {
+    async connectAccount(organisationId: string, code: string, redirectUri: string): Promise<void> {
         // 1. Exchange code for short-lived token
         let accessToken = await this.exchangeCodeForToken(code, redirectUri);
 
@@ -115,13 +115,13 @@ export class MetaService {
 
         // 3. Save credentials
         // Use credentialsService to save/rotate
-        const hasCreds = await credentialsService.hasCredentials(accountId, 'meta_ads');
+        const hasCreds = await credentialsService.hasCredentials(organisationId, 'meta_ads');
         const secrets = { accessToken };
 
         if (hasCreds) {
-            await credentialsService.rotateCredentials(accountId, 'meta_ads', secrets);
+            await credentialsService.rotateCredentials(organisationId, 'meta_ads', secrets);
         } else {
-            await credentialsService.saveCredentials(accountId, 'meta_ads', secrets);
+            await credentialsService.saveCredentials(organisationId, 'meta_ads', secrets);
         }
     }
 
@@ -131,10 +131,9 @@ export class MetaService {
 
     /**
      * Get configuration for an account
-     * TODO: Implement actual storage (database table for integration configs)
      */
-    async getConfigForAccount(accountId: string): Promise<MetaApiConfig | null> {
-        const creds = await credentialsService.getCredentials(accountId, 'meta_ads');
+    async getConfigForAccount(organisationId: string): Promise<MetaApiConfig | null> {
+        const creds = await credentialsService.getCredentials(organisationId, 'meta_ads');
         if (!creds) {
             return null;
         }
@@ -147,14 +146,13 @@ export class MetaService {
 
     /**
      * Save configuration for an account
-     * TODO: Implement actual storage
      */
     async saveConfigForAccount(
-        accountId: string,
+        organisationId: string,
         _config: MetaApiConfig,
     ): Promise<void> {
         // Placeholder - in production, save to database
-        console.warn(`[MetaService] saveConfigForAccount not implemented for account ${accountId}`);
+        console.warn(`[MetaService] saveConfigForAccount not implemented for organisation ${organisationId}`);
     }
 
     // ===========================================================================
@@ -164,8 +162,8 @@ export class MetaService {
     /**
      * Get connected ad accounts for an account
      */
-    async getConnectedAccounts(accountId: string): Promise<MetaAdAccount[]> {
-        const config = await this.getConfigForAccount(accountId);
+    async getConnectedAccounts(organisationId: string): Promise<MetaAdAccount[]> {
+        const config = await this.getConfigForAccount(organisationId);
         if (!config) {
             return [];
         }
@@ -182,8 +180,8 @@ export class MetaService {
     /**
      * Get lead forms for a page
      */
-    async getLeadForms(accountId: string, pageId: string): Promise<MetaLeadGenForm[]> {
-        const config = await this.getConfigForAccount(accountId);
+    async getLeadForms(organisationId: string, pageId: string): Promise<MetaLeadGenForm[]> {
+        const config = await this.getConfigForAccount(organisationId);
         if (!config) {
             throw new Error('Meta integration not configured for this account');
         }
@@ -201,11 +199,11 @@ export class MetaService {
      * Fetch leads from Meta without saving to database
      */
     async fetchLeadsFromForm(
-        accountId: string,
+        organisationId: string,
         formId: string,
         since?: Date,
     ): Promise<MetaLeadInternal[]> {
-        const config = await this.getConfigForAccount(accountId);
+        const config = await this.getConfigForAccount(organisationId);
         if (!config) {
             throw new Error('Meta integration not configured for this account');
         }
@@ -220,11 +218,11 @@ export class MetaService {
      * Sync leads from a Meta form into the database
      */
     async syncLeadsFromForm(
-        accountId: string,
+        organisationId: string,
         formId: string,
         since?: Date,
     ): Promise<SyncResult> {
-        const config = await this.getConfigForAccount(accountId);
+        const config = await this.getConfigForAccount(organisationId);
         if (!config) {
             throw new Error('Meta integration not configured for this account');
         }
@@ -239,14 +237,22 @@ export class MetaService {
                 return result;
             }
 
-            const leadsToCreate = mapMetaLeadsToPrismaInputs(metaLeads, accountId);
+            const leadsToCreate = mapMetaLeadsToPrismaInputs(metaLeads, organisationId);
 
             // Filter out leads that already exist (by email)
+            // Note: In RLS setup, finding duplicates across an organisation requires correct context or unrestricted query?
+            // Since we are running as app_client context or app_internal (if worker), assuming context is set.
+            // But wait, sync might run as worker (app_internal).
+
+            // Using prisma.lead.findMany requires correct context if RLS enabled.
+            // If we are calling from API (e.g. "Sync Now"), we have context.
+            // If background worker, we should have app_internal.
+
             const existingEmails = new Set(
                 (
                     await prisma.lead.findMany({
                         where: {
-                            accountId,
+                            organisationId,
                             email: { in: leadsToCreate.map((l) => l.email) },
                         },
                         select: { email: true },

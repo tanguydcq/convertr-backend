@@ -11,6 +11,7 @@ export interface MetaApiConfig {
     accessToken: string;
     appId?: string;
     appSecret?: string;
+    adAccountId?: string;
 }
 
 // ============================================================================

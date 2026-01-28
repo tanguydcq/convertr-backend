@@ -31,21 +31,24 @@ export class CredentialsError extends Error {
     }
 }
 
-class CredentialsService {
+export class CredentialsService {
     /**
-     * Save or update credentials for an account/provider pair.
+     * Save or update credentials for an organisation/provider pair.
      * If credentials already exist, use rotateCredentials() instead.
      * 
      * @throws CredentialsError if credentials already exist
      */
     async saveCredentials<P extends Provider>(
-        accountId: string,
+        organisationId: string,
         provider: P,
         secrets: ProviderSecretsMap[P],
     ): Promise<void> {
         // Check if credentials already exist
-        const existing = await prisma.externalCredential.findUnique({
-            where: { accountId_provider: { accountId, provider } },
+        const existing = await prisma.credential.findFirst({
+            where: {
+                organisationId,
+                provider
+            },
         });
 
         if (existing) {
@@ -55,59 +58,65 @@ class CredentialsService {
             );
         }
 
-        const encryptedPayload = encrypt(secrets);
+        const encryptedData = encrypt(secrets);
 
-        await prisma.externalCredential.create({
+        await prisma.credential.create({
             data: {
-                accountId,
+                organisationId,
                 provider,
-                encryptedPayload,
+                encryptedData,
+                keyId: 'v1', // Default key version
             },
         });
     }
 
     /**
-     * Retrieve and decrypt credentials for an account/provider pair.
+     * Retrieve and decrypt credentials for an organisation/provider pair.
      * 
      * @returns Decrypted credentials or null if not found
      */
     async getCredentials<P extends Provider>(
-        accountId: string,
+        organisationId: string,
         provider: P,
     ): Promise<DecryptedCredential<P> | null> {
-        const record = await prisma.externalCredential.findUnique({
-            where: { accountId_provider: { accountId, provider } },
+        const record = await prisma.credential.findFirst({
+            where: {
+                organisationId,
+                provider
+            },
         });
 
         if (!record) {
             return null;
         }
 
-        const secrets = decryptAs<ProviderSecretsMap[P]>(record.encryptedPayload);
+        const secrets = decryptAs<ProviderSecretsMap[P]>(record.encryptedData);
 
         return {
             id: record.id,
-            accountId: record.accountId,
+            organisationId: record.organisationId,
             provider: provider,
             secrets,
             createdAt: record.createdAt,
-            rotatedAt: record.rotatedAt,
+            rotatedAt: record.updatedAt, // Using updatedAt as rotatedAt equivalent
         };
     }
 
     /**
      * Rotate (update) existing credentials.
-     * Updates the rotatedAt timestamp for audit purposes.
      * 
      * @throws CredentialsError if credentials don't exist
      */
     async rotateCredentials<P extends Provider>(
-        accountId: string,
+        organisationId: string,
         provider: P,
         newSecrets: ProviderSecretsMap[P],
     ): Promise<void> {
-        const existing = await prisma.externalCredential.findUnique({
-            where: { accountId_provider: { accountId, provider } },
+        const existing = await prisma.credential.findFirst({
+            where: {
+                organisationId,
+                provider
+            },
         });
 
         if (!existing) {
@@ -117,25 +126,29 @@ class CredentialsService {
             );
         }
 
-        const encryptedPayload = encrypt(newSecrets);
+        const encryptedData = encrypt(newSecrets);
 
-        await prisma.externalCredential.update({
+        await prisma.credential.update({
             where: { id: existing.id },
             data: {
-                encryptedPayload,
-                rotatedAt: new Date(),
+                encryptedData,
+                updatedAt: new Date(),
+                keyId: 'v1',
             },
         });
     }
 
     /**
-     * Delete credentials for an account/provider pair.
+     * Delete credentials for an organisation/provider pair.
      * 
      * @throws CredentialsError if credentials don't exist
      */
-    async deleteCredentials(accountId: string, provider: Provider): Promise<void> {
-        const existing = await prisma.externalCredential.findUnique({
-            where: { accountId_provider: { accountId, provider } },
+    async deleteCredentials(organisationId: string, provider: Provider): Promise<void> {
+        const existing = await prisma.credential.findFirst({
+            where: {
+                organisationId,
+                provider
+            },
         });
 
         if (!existing) {
@@ -145,29 +158,29 @@ class CredentialsService {
             );
         }
 
-        await prisma.externalCredential.delete({
+        await prisma.credential.delete({
             where: { id: existing.id },
         });
     }
 
     /**
-     * Check if credentials exist for an account/provider pair.
+     * Check if credentials exist for an organisation/provider pair.
      * Does not decrypt the credentials.
      */
-    async hasCredentials(accountId: string, provider: Provider): Promise<boolean> {
-        const count = await prisma.externalCredential.count({
-            where: { accountId, provider },
+    async hasCredentials(organisationId: string, provider: Provider): Promise<boolean> {
+        const count = await prisma.credential.count({
+            where: { organisationId, provider },
         });
         return count > 0;
     }
 
     /**
-     * List all providers with stored credentials for an account.
+     * List all providers with stored credentials for an organisation.
      * Does not decrypt any credentials.
      */
-    async listProviders(accountId: string): Promise<Provider[]> {
-        const records = await prisma.externalCredential.findMany({
-            where: { accountId },
+    async listProviders(organisationId: string): Promise<Provider[]> {
+        const records = await prisma.credential.findMany({
+            where: { organisationId },
             select: { provider: true },
         });
 

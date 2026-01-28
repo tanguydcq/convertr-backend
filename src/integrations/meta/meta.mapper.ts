@@ -65,7 +65,7 @@ export function mapMetaLeadToInternal(metaLead: MetaLead): MetaLeadInternal {
  */
 export function mapMetaLeadToPrismaInput(
     metaLead: MetaLead,
-    accountId: string,
+    organisationId: string,
 ): Prisma.LeadCreateInput {
     const internal = mapMetaLeadToInternal(metaLead);
 
@@ -75,7 +75,7 @@ export function mapMetaLeadToPrismaInput(
     const lastName = nameParts.slice(1).join(' ') || '';
 
     return {
-        account: { connect: { id: accountId } },
+        organisation: { connect: { id: organisationId } },
         firstName,
         lastName,
         email: internal.email,
@@ -91,7 +91,7 @@ export function mapMetaLeadToPrismaInput(
  */
 export function mapMetaLeadsToPrismaInputs(
     metaLeads: MetaLead[],
-    accountId: string,
+    organisationId: string,
 ): Prisma.LeadCreateInput[] {
-    return metaLeads.map((lead) => mapMetaLeadToPrismaInput(lead, accountId));
+    return metaLeads.map((lead) => mapMetaLeadToPrismaInput(lead, organisationId));
 }

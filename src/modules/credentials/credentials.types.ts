@@ -46,7 +46,7 @@ export interface ProviderSecretsMap {
  * Input for saving credentials
  */
 export interface SaveCredentialsInput<P extends Provider> {
-    tenantId: string;
+    organisationId: string;
     provider: P;
     secrets: ProviderSecretsMap[P];
 }
@@ -56,7 +56,7 @@ export interface SaveCredentialsInput<P extends Provider> {
  */
 export interface DecryptedCredential<P extends Provider> {
     id: string;
-    accountId: string;
+    organisationId: string;
     provider: P;
     secrets: ProviderSecretsMap[P];
     createdAt: Date;

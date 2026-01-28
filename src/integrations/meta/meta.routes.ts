@@ -4,6 +4,15 @@ import { metaService } from './meta.service.js';
 import { authenticate } from '../../middleware/index.js';
 
 export const metaRoutes: FastifyPluginAsync = async (app) => {
+    // Helper to get organisation ID
+    function getOrganisationId(request: any): string {
+        const orgId = request.headers['x-organisation-id'];
+        if (!orgId || typeof orgId !== 'string') {
+            throw new Error('Missing or invalid x-organisation-id header');
+        }
+        return orgId;
+    }
+
     // POST /api/integrations/meta/connect
     app.post('/connect', {
         preHandler: [authenticate],
@@ -28,21 +37,33 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                     properties: {
                         error: { type: 'string' }
                     }
+                },
+                400: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
                 }
             }
         }
     }, async (request, reply) => {
         const { code, redirectUri } = request.body as { code: string; redirectUri: string };
-        const accountId = request.account?.accountId;
 
-        if (!accountId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
+        try {
+            const organisationId = getOrganisationId(request);
+            // TODO: Verify user has access to organisationId here (if not covered by middleware)
+
+            await metaService.connectAccount(organisationId, code, redirectUri);
+            return { status: 'ok' };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: 'Internal Server Error' });
         }
-
-        await metaService.connectAccount(accountId, code, redirectUri);
-
-        return { status: 'ok' };
     });
+
     // GET /api/integrations/meta/status
     app.get('/status', {
         preHandler: [authenticate],
@@ -59,18 +80,29 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                     properties: {
                         error: { type: 'string' }
                     }
+                },
+                400: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
                 }
             }
         }
     }, async (request, reply) => {
-        const accountId = request.account?.accountId;
-        if (!accountId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
+        try {
+            const organisationId = getOrganisationId(request);
+            const connected = await metaService.isConnected(organisationId);
+            return { connected };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: 'Internal Server Error' });
         }
-
-        const connected = await metaService.isConnected(accountId);
-        return { connected };
     });
+
     // GET /api/integrations/meta/ad-accounts
     app.get('/ad-accounts', {
         preHandler: [authenticate],
@@ -92,17 +124,27 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                     properties: {
                         error: { type: 'string' }
                     }
+                },
+                400: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
                 }
             }
         }
     }, async (request, reply) => {
-        const accountId = request.account?.accountId;
-        if (!accountId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
+        try {
+            const organisationId = getOrganisationId(request);
+            const accounts = await metaService.getConnectedAccounts(organisationId);
+            return accounts;
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: 'Internal Server Error' });
         }
-
-        const accounts = await metaService.getConnectedAccounts(accountId);
-        return accounts;
     });
 
     // POST /api/integrations/meta/select-account
@@ -122,18 +164,34 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                     properties: {
                         status: { type: 'string' }
                     }
+                },
+                401: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
+                },
+                400: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
                 }
             }
         }
     }, async (request, reply) => {
         const { adAccountId } = request.body as { adAccountId: string };
-        const accountId = request.account?.accountId;
 
-        if (!accountId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
+        try {
+            const organisationId = getOrganisationId(request);
+            await metaService.selectAdAccount(organisationId, adAccountId);
+            return { status: 'ok' };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: 'Internal Server Error' });
         }
-
-        await metaService.selectAdAccount(accountId, adAccountId);
-        return { status: 'ok' };
     });
 };

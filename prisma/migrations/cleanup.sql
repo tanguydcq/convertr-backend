@@ -13,10 +13,5 @@ DROP SCHEMA IF EXISTS internal CASCADE;
 DROP SCHEMA IF EXISTS analytics CASCADE;
 
 -- Drop public schema and recreate it to remove any default migration history or leftovers
+-- Drop public schema
 DROP SCHEMA IF EXISTS public CASCADE;
-
-CREATE SCHEMA public;
-
-GRANT ALL ON SCHEMA public TO postgres;
-
-GRANT ALL ON SCHEMA public TO public;
