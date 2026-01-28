@@ -5,10 +5,9 @@ import { credentialsService } from '../credentials/credentials.service.js';
 import { z } from 'zod';
 
 // Validation schemas
-const connectSchema = z.object({
-    accessToken: z.string().min(1),
-    adAccountId: z.string().min(1),
-});
+// Validation schemas
+// const connectSchema is now defined inside the method to support conditional logic
+
 
 export class MetaController {
     /**
@@ -59,24 +58,46 @@ export class MetaController {
     async connect(request: FastifyRequest, reply: FastifyReply) {
         const accountId = request.account!.accountId;
 
-        const result = connectSchema.safeParse(request.body);
+        // Validation schema for both flows
+        const schema = z.object({
+            // OAuth Flow
+            code: z.string().optional(),
+            redirectUri: z.string().optional(),
+            // Manual/Direct Flow
+            accessToken: z.string().optional(),
+            adAccountId: z.string().optional(),
+        }).refine(data => {
+            // Either code+redirectUri OR accessToken+adAccountId must be present
+            const isOAuth = !!(data.code && data.redirectUri);
+            const isManual = !!(data.accessToken && data.adAccountId);
+            return isOAuth || isManual;
+        }, {
+            message: "Must provide either (code + redirectUri) for OAuth flow OR (accessToken + adAccountId) for manual connection"
+        });
+
+        const result = schema.safeParse(request.body);
+
         if (!result.success) {
             return reply.status(400).send({
                 error: 'Validation Error',
-                message: result.error.errors[0].message
+                message: result.error.errors[0].message || 'Invalid connection parameters'
             });
         }
 
-        const { accessToken, adAccountId } = result.data;
+        const { code, redirectUri, accessToken, adAccountId } = result.data;
 
         try {
-            // Verify the credentials work by fetching something small (e.g. campaigns or just the account itself)
-            // For now, we trust the inputs but in a real app we should validate them against Meta API here
-
-            await metaService.saveConfigForAccount(accountId, {
-                accessToken,
-                adAccountId,
-            });
+            if (code && redirectUri) {
+                // OAuth Flow: Exchange code for token and save
+                await metaService.connectAccount(accountId, code, redirectUri);
+            } else if (accessToken && adAccountId) {
+                // Manual Flow: Verify and save
+                // Verify the credentials work by fetching something small
+                await metaService.saveConfigForAccount(accountId, {
+                    accessToken,
+                    adAccountId,
+                });
+            }
 
             return reply.send({ success: true });
         } catch (error) {

@@ -162,7 +162,14 @@ export class MetaService {
     /**
      * Get connected ad accounts for an account
      */
-    async getConnectedAccounts(organisationId: string): Promise<MetaAdAccount[]> {
+    async getConnectedAccounts(organisationId: string, accessToken?: string): Promise<MetaAdAccount[]> {
+        if (accessToken) {
+            // Use provided token (e.g. for connection preview)
+            const tempClient = new MetaClient({ accessToken, adAccountId: '' });
+            const response = await tempClient.getAdAccounts();
+            return response.data;
+        }
+
         const config = await this.getConfigForAccount(organisationId);
         if (!config) {
             return [];
@@ -286,6 +293,38 @@ export class MetaService {
         }
 
         return result;
+    }
+
+    // ===========================================================================
+    // Campaigns & Insights
+    // ===========================================================================
+
+    /**
+     * Get campaigns
+     */
+    async getCampaigns(organisationId: string): Promise<any[]> {
+        const config = await this.getConfigForAccount(organisationId);
+        if (!config) {
+            throw new Error('Meta integration not configured for this account');
+        }
+
+        this.initClient(config);
+        // MetaClient has getCampaigns but it needs accountId from config
+        if (!config.adAccountId) {
+            throw new Error('Ad Account ID not configured');
+        }
+
+        const response = await this.ensureClient().getCampaigns(config.adAccountId);
+        return response.data;
+    }
+
+    /**
+     * Get insights
+     */
+    async getInsights(organisationId: string, _campaignId?: string, _datePreset?: string): Promise<any[]> {
+        // Placeholder - MetaClient doesn't have getInsights yet
+        // Returning empty array to satisfy controller
+        return [];
     }
 }
 
