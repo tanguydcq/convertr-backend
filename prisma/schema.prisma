@@ -1,11 +1,18 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth", "crm", "ads", "secrets", "internal", "analytics"]
 }
+
+// -----------------------------------------------------------------------------
+// SCHEMA: auth
+// Identity management, public access allowed for app_client
+// -----------------------------------------------------------------------------
 
 model Account {
   id           String   @id @default(uuid()) @db.Uuid
@@ -14,12 +21,13 @@ model Account {
   passwordHash String   @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  leads               Lead[]
-  refreshTokens       RefreshToken[]
-  externalCredentials ExternalCredential[]
-  authLogs            AuthLog[]
+  // Relations
+  organisations Membership[]
+  refreshTokens RefreshToken[]
+  authLogs      AuthLog[]
 
   @@map("accounts")
+  @@schema("auth")
 }
 
 model RefreshToken {
@@ -32,52 +40,314 @@ model RefreshToken {
 
   @@index([accountId])
   @@map("refresh_tokens")
+  @@schema("auth")
 }
 
-model Lead {
+model Organisation {
   id        String   @id @default(uuid()) @db.Uuid
-  firstName String   @map("first_name")
-  lastName  String   @map("last_name")
-  email     String
-  phone     String?
-  company   String?
-  budget    Int?
-  score     Int      @default(0)
-  source    String   @default("manual")
-  status    String   @default("NEW_LEAD")
-  accountId String   @map("account_id") @db.Uuid
-  account   Account  @relation(fields: [accountId], references: [id])
+  name      String
+  slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([accountId])
-  @@index([status])
-  @@map("leads")
+  // Relations
+  members    Membership[]
+  leads      Lead[]
+  campaigns  Campaign[]
+  adAccounts AdAccount[]
+
+  @@map("organisations")
+  @@schema("auth")
 }
 
-model ExternalCredential {
-  id               String    @id @default(uuid()) @db.Uuid
-  accountId        String    @map("account_id") @db.Uuid
-  account          Account   @relation(fields: [accountId], references: [id])
-  provider         String
-  encryptedPayload Bytes     @map("encrypted_payload")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  rotatedAt        DateTime? @map("rotated_at")
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
 
-  @@unique([accountId, provider])
-  @@index([accountId])
-  @@map("external_credentials")
+  @@schema("auth")
+}
+
+model Membership {
+  id             String   @id @default(uuid()) @db.Uuid
+  accountId      String   @map("account_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, organisationId])
+  @@map("memberships")
+  @@schema("auth")
 }
 
 model AuthLog {
   id        String   @id @default(uuid()) @db.Uuid
   accountId String   @map("account_id") @db.Uuid
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   action    String
   metadata  Json?
   ipAddress String?  @map("ip_address")
   userAgent String?  @map("user_agent")
   createdAt DateTime @default(now()) @map("created_at")
 
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
   @@index([accountId])
   @@map("auth_logs")
+  @@schema("auth")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: crm
+// Business data, PROTECTED BY RLS via app.org_id
+// -----------------------------------------------------------------------------
+
+model Lead {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  email          String
+  phone          String?
+  company        String?
+  budget         Int?
+  score          Int      @default(0)
+  source         String   @default("manual")
+  status         String   @default("NEW_LEAD")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organisation  Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade) // Logic deleted by RLS actually
+  statusHistory LeadStatusHistory[]
+  calls         Call[]
+  appointments  Appointment[]
+
+  @@index([organisationId])
+  @@index([status])
+  @@map("leads")
+  @@schema("crm")
+}
+
+model LeadStatusHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid // Denormalized for RLS performance/simplicity
+  status         String
+  changedAt      DateTime @default(now()) @map("changed_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_status_history")
+  @@schema("crm")
+}
+
+model Call {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  duration       Int      @default(0)
+  status         String
+  startedAt      DateTime @default(now()) @map("started_at")
+
+  lead       Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  transcript CallTranscript?
+
+  @@index([organisationId])
+  @@map("calls")
+  @@schema("crm")
+}
+
+model CallTranscript {
+  id             String   @id @default(uuid()) @db.Uuid
+  callId         String   @unique @map("call_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_transcripts")
+  @@schema("crm")
+}
+
+model Appointment {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  title          String
+  scheduledAt    DateTime @map("scheduled_at")
+  status         String   @default("SCHEDULED")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId])
+  @@map("appointments")
+  @@schema("crm")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: ads
+// Advertising data, linked to organisation, no sensitive tokens here
+// -----------------------------------------------------------------------------
+
+model AdAccount {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  platformId     String   @map("platform_id") @db.Uuid
+  externalId     String   @map("external_id")
+  name           String
+  currency       String
+  status         String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  platform     Platform     @relation(fields: [platformId], references: [id])
+  campaigns    Campaign[]
+
+  @@unique([platformId, externalId])
+  @@index([organisationId])
+  @@map("ad_accounts")
+  @@schema("ads")
+}
+
+model Platform {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique // e.g. "facebook", "google"
+
+  adAccounts AdAccount[]
+
+  @@map("platforms")
+  @@schema("ads")
+}
+
+model Campaign {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  adAccountId    String   @map("ad_account_id") @db.Uuid
+  externalId     String   @map("external_id")
+  name           String
+  status         String
+  budget         Decimal?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount    @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([adAccountId, externalId])
+  @@index([organisationId])
+  @@map("campaigns")
+  @@schema("ads")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: secrets
+// Sensitive credentials. NO ACCESS for app_client.
+// Accessed only by app_internal (workers) via dedicated Prisma Client
+// -----------------------------------------------------------------------------
+
+model Credential {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  provider       String // e.g. "facebook_ads"
+  encryptedData  Bytes    @map("encrypted_data") // Houses access_token, refresh_token
+  keyId          String   @map("key_id") // Reference to the encryption key used
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([organisationId])
+  @@map("credentials")
+  @@schema("secrets")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: internal
+// System logs, AI prompts, internal logic. Restricted access.
+// -----------------------------------------------------------------------------
+
+model SystemLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  level     String
+  message   String
+  context   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("system_logs")
+  @@schema("internal")
+}
+
+model IaPrompt {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  template  String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("ia_prompts")
+  @@schema("internal")
+}
+
+model ScoringModel {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  config    Json
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("scoring_models")
+  @@schema("internal")
+}
+
+model FeatureFlag {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  rules     Json? // Targeting rules
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("feature_flags")
+  @@schema("internal")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: analytics
+// Append-only high volume data
+// -----------------------------------------------------------------------------
+
+model Event {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  eventType      String   @map("event_type")
+  properties     Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organisationId, createdAt])
+  @@map("events")
+  @@schema("analytics")
+}
+
+model DailyKpi {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  date           DateTime @db.Date
+  metric         String
+  value          Decimal
+
+  @@unique([organisationId, date, metric])
+  @@map("daily_kpis")
+  @@schema("analytics")
+}
+
+model FunnelMetric {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  stepName       String   @map("step_name")
+  count          Int      @default(0)
+  date           DateTime @db.Date
+
+  @@index([organisationId, date])
+  @@map("funnel_metrics")
+  @@schema("analytics")
 }

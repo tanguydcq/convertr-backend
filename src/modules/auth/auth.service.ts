@@ -15,6 +15,12 @@ export interface AuthenticatedAccount {
   id: string;
   email: string;
   name: string;
+  organisations: {
+    id: string;
+    name: string;
+    slug: string;
+    role: string;
+  }[];
 }
 
 class AuthService {
@@ -25,6 +31,13 @@ class AuthService {
     // Find account by email
     const account = await prisma.account.findUnique({
       where: { email: email.toLowerCase() },
+      include: {
+        organisations: {
+          include: {
+            organisation: true,
+          },
+        },
+      },
     });
 
     if (!account) {
@@ -52,6 +65,12 @@ class AuthService {
         id: account.id,
         email: account.email,
         name: account.name,
+        organisations: account.organisations.map((m) => ({
+          id: m.organisation.id,
+          name: m.organisation.name,
+          slug: m.organisation.slug,
+          role: m.role,
+        })),
       },
     };
   }
@@ -185,6 +204,13 @@ class AuthService {
   async getAccountProfile(accountId: string): Promise<AuthenticatedAccount> {
     const account = await prisma.account.findUnique({
       where: { id: accountId },
+      include: {
+        organisations: {
+          include: {
+            organisation: true,
+          },
+        },
+      },
     });
 
     if (!account) {
@@ -195,6 +221,12 @@ class AuthService {
       id: account.id,
       email: account.email,
       name: account.name,
+      organisations: account.organisations.map((m) => ({
+        id: m.organisation.id,
+        name: m.organisation.name,
+        slug: m.organisation.slug,
+        role: m.role,
+      })),
     };
   }
 

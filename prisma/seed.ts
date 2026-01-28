@@ -1,110 +1,121 @@
-import { PrismaClient } from '@prisma/client';
-import { hashPassword } from '../src/lib/password.js';
-import { faker } from '@faker-js/faker';
+import { PrismaClient, Role } from '@prisma/client'
+import { hashPassword } from '../src/lib/password.js'
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 async function main() {
-  console.log('Seeding database...');
+  console.log('🌱 Starting seed...')
 
-  // Clean up existing data
-  await prisma.lead.deleteMany();
-  await prisma.refreshToken.deleteMany();
-  await prisma.externalCredential.deleteMany();
-  await prisma.authLog.deleteMany();
-  await prisma.account.deleteMany();
+  // 1. Create Account
+  const email = 'user@convertr.io'
+  const account = await prisma.account.upsert({
+    where: { email },
+    update: {},
+    create: {
+      name: 'Demo User',
+      email,
+      passwordHash: await hashPassword('password123'), // Valid password for login
+    },
+  })
+  console.log(`👤 Created Account: ${account.email}`)
 
-  const passwordHash = await hashPassword('password123');
+  // 2. Create Organisation
+  const orgSlug = 'demo-org'
+  const organisation = await prisma.organisation.upsert({
+    where: { slug: orgSlug },
+    update: {},
+    create: {
+      name: 'Demo Organisation',
+      slug: orgSlug,
+    },
+  })
+  console.log(`🏢 Created Organisation: ${organisation.name}`)
 
-  // --- 1. Create Main Test Account (Acme Corp) ---
-  const acmeAccount = await prisma.account.create({
-    data: {
-      name: 'Acme Corp',
-      email: 'admin@acmecorp.com',
-      passwordHash,
-      leads: {
-        create: [
-          {
-            firstName: 'John',
-            lastName: 'Doe',
-            email: 'john.doe@example.com',
-            source: 'website',
-            status: 'NEW_LEAD',
-            company: 'TechCorp',
-            budget: 150000,
-            score: 75,
-          },
-          {
-            firstName: 'Jane',
-            lastName: 'Smith',
-            email: 'jane.smith@example.com',
-            source: 'linkedin',
-            status: 'IN_QUALIFICATION',
-            company: 'BizInc',
-            budget: 50000,
-            score: 40,
-          },
-        ],
+  // 3. Create Membership
+  await prisma.membership.upsert({
+    where: {
+      accountId_organisationId: {
+        accountId: account.id,
+        organisationId: organisation.id,
       },
     },
-  });
+    update: {},
+    create: {
+      accountId: account.id,
+      organisationId: organisation.id,
+      role: Role.OWNER,
+    },
+  })
+  console.log(`🤝 Membership created`)
 
-  console.log(`Created main account: ${acmeAccount.name} (${acmeAccount.email})`);
+  // 4. Create Leads (CRM)
+  // note: If RLS is enforced for the connection used by seeding, we need to bypass it or set context.
+  // The default connection is usually admin/superuser which bypasses RLS by default on Postgres.
+  // If not, we might need: await prisma.$executeRaw`SET app.org_id = '${organisation.id}'`
 
-  // --- 2. Generate Random Accounts and Leads ---
-  const NUM_ACCOUNTS = 15;
-  const MIN_LEADS_PER_ACCOUNT = 20;
-  const MAX_LEADS_PER_ACCOUNT = 50;
+  // Checking if we need to set context (Preemptively doing it just in case non-superuser is used)
+  // We wrap in a transaction if we needed strict session context, but here we just try direct create.
 
-  console.log(`Generating ${NUM_ACCOUNTS} random accounts with leads...`);
+  try {
+    const leadEmail = 'lead@example.com'
+    // CRM tables access might be restricted if RLS is on and we are not superuser
+    // Trying to set the variable for the current session:
+    await prisma.$executeRawUnsafe(`SET app.org_id = '${organisation.id}';`)
 
-  for (let i = 0; i < NUM_ACCOUNTS; i++) {
-    const companyName = faker.company.name();
-    const firstName = faker.person.firstName();
-
-    // Create Account
-    const account = await prisma.account.create({
+    await prisma.lead.create({
       data: {
-        name: companyName,
-        email: faker.internet.email({ firstName, provider: companyName.toLowerCase().replace(/[^a-z]/g, '') + '.com' }).toLowerCase(),
-        passwordHash,
+        organisationId: organisation.id,
+        firstName: 'John',
+        lastName: 'Doe',
+        email: leadEmail,
+        status: 'NEW_LEAD',
+        source: 'seed',
+        score: 50,
       },
-    });
+    })
+    console.log(`📈 Created Lead for Org 1: ${leadEmail}`)
 
-    // Generate Leads for this Account
-    const numLeads = faker.number.int({ min: MIN_LEADS_PER_ACCOUNT, max: MAX_LEADS_PER_ACCOUNT });
-    const leadsData = [];
+    // 5. Create Second Organisation (competitor) to verify isolation
+    const org2Slug = 'competitor-org'
+    const org2 = await prisma.organisation.upsert({
+      where: { slug: org2Slug },
+      update: {},
+      create: {
+        name: 'Competitor Inc',
+        slug: org2Slug,
+      },
+    })
+    console.log(`🏢 Created Organisation 2: ${org2.name}`)
 
-    for (let j = 0; j < numLeads; j++) {
-      leadsData.push({
-        firstName: faker.person.firstName(),
-        lastName: faker.person.lastName(),
-        email: faker.internet.email(),
-        phone: faker.phone.number(),
-        company: faker.company.name(),
-        budget: faker.number.int({ min: 10000, max: 500000 }),
-        score: faker.number.int({ min: 0, max: 100 }),
-        source: faker.helpers.arrayElement(['website', 'linkedin', 'referral', 'cold_call', 'ad_campaign']),
-        status: faker.helpers.arrayElement(['NEW_LEAD', 'IN_QUALIFICATION', 'QUALIFIED', 'MEETING_BOOKED', 'NOT_QUALIFIED']),
-        accountId: account.id,
-      });
-    }
+    // Create Lead for Org 2
+    // Switch context for Org 2
+    await prisma.$executeRawUnsafe(`SET app.org_id = '${org2.id}';`)
 
-    await prisma.lead.createMany({
-      data: leadsData,
-    });
+    await prisma.lead.create({
+      data: {
+        organisationId: org2.id,
+        firstName: 'Secret',
+        lastName: 'Agent',
+        email: 'secret@competitor.com',
+        status: 'NEW_LEAD',
+        source: 'seed',
+        score: 99,
+      },
+    })
+    console.log(`🔒 Created Lead for Org 2: secret@competitor.com`)
 
-    // console.log(`  - Created account "${companyName}" with ${numLeads} leads.`);
+  } catch (e) {
+    console.warn('⚠️  Could not create lead (probably RLS restriction or duplicate). Error ignored for seed.', e);
   }
 
-  console.log('Seeding completed successfully.');
+  console.log('✅ Seed finished.')
 }
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error(e)
+    process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect();
-  });
+    await prisma.$disconnect()
+  })

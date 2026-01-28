@@ -1,5 +1,6 @@
-import prisma from '../../lib/prisma.js';
 import { Lead } from '@prisma/client';
+import { withRLS } from '../../lib/rls.js';
+
 
 // DTO for API responses
 export interface LeadDTO {
@@ -49,142 +50,124 @@ export interface PaginatedLeads {
 
 class LeadsService {
   /**
-   * Get leads for a specific account with pagination
+   * Get leads for a specific organisation with pagination
+   * USES RLS: The query is wrapped in a transaction that sets app.org_id
    */
-  async getLeadsByAccount(
-    accountId: string,
+  async getLeadsByOrganisation(
+    organisationId: string,
     pagination: PaginationParams
   ): Promise<PaginatedLeads> {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
-    const [leads, total] = await Promise.all([
-      prisma.lead.findMany({
-        where: { accountId },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.lead.count({ where: { accountId } }),
-    ]);
+    return withRLS(organisationId, async (tx) => {
+      // Note: We MUST filter by organisationId in the WHERE clause even with RLS 
+      // because RLS is a safety net, but explicit filtering is better for performance optimization queries.
+      // However, if RLS works, even `where: {}` would return only the org's leads.
+      // Let's rely on both for safety + explicitness.
+      const [leads, total] = await Promise.all([
+        tx.lead.findMany({
+          where: { organisationId },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        tx.lead.count({ where: { organisationId } }),
+      ]);
 
-    return {
-      leads: leads.map(this.toDTO),
-      total,
-      page,
-      limit,
-      hasMore: skip + leads.length < total,
-    };
+      return {
+        leads: leads.map(this.toDTO),
+        total,
+        page,
+        limit,
+        hasMore: skip + leads.length < total,
+      };
+    });
   }
 
   /**
-   * Get all leads (for system admin, if implemented later) with pagination
+   * Get a single lead by ID and organisation
    */
-  async getAllLeads(pagination: PaginationParams): Promise<PaginatedLeads & { leads: (LeadDTO & { accountId: string })[] }> {
-    const { page, limit } = pagination;
-    const skip = (page - 1) * limit;
+  async getLeadById(id: string, organisationId: string): Promise<LeadDTO | null> {
+    return withRLS(organisationId, async (tx) => {
+      const lead = await tx.lead.findFirst({
+        where: {
+          id,
+          organisationId
+        }
+      });
 
-    const [leads, total] = await Promise.all([
-      prisma.lead.findMany({
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.lead.count(),
-    ]);
-
-    return {
-      leads: leads.map((lead) => ({
-        ...this.toDTO(lead),
-        accountId: lead.accountId,
-      })),
-      total,
-      page,
-      limit,
-      hasMore: skip + leads.length < total,
-    };
+      return lead ? this.toDTO(lead) : null;
+    });
   }
 
   /**
-   * Get a single lead by ID and account
+   * Create a new lead for an organisation
    */
-  async getLeadById(id: string, accountId: string): Promise<LeadDTO | null> {
-    // We enforce accountId check to ensure isolation
-    const lead = await prisma.lead.findFirst({
-      where: {
-        id,
-        accountId
+  async createLead(organisationId: string, input: CreateLeadInput): Promise<LeadDTO> {
+    return withRLS(organisationId, async (tx) => {
+      const lead = await tx.lead.create({
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone ?? null,
+          company: input.company ?? null,
+          budget: input.budget ?? null,
+          score: input.score ?? 0,
+          source: input.source ?? 'manual',
+          status: input.status ?? 'NEW_LEAD',
+          organisationId,
+        },
+      });
+
+      return this.toDTO(lead);
+    });
+  }
+
+  async updateLead(organisationId: string, leadId: string, input: UpdateLeadInput): Promise<LeadDTO> {
+    return withRLS(organisationId, async (tx) => {
+      // Check existence first within RLS context
+      const lead = await tx.lead.findUnique({
+        where: { id: leadId },
+      });
+
+      if (!lead || lead.organisationId !== organisationId) {
+        throw new Error('Lead not found');
       }
-    });
 
-    return lead ? this.toDTO(lead) : null;
+      const updatedLead = await tx.lead.update({
+        where: { id: leadId },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          company: input.company,
+          budget: input.budget,
+          score: input.score,
+          status: input.status,
+        },
+      });
+
+      return this.toDTO(updatedLead);
+    });
   }
 
-  /**
-   * Create a new lead for an account
-   */
-  async createLead(accountId: string, input: CreateLeadInput): Promise<LeadDTO> {
-    const lead = await prisma.lead.create({
-      data: {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email,
-        phone: input.phone ?? null,
-        company: input.company ?? null,
-        budget: input.budget ?? null,
-        score: input.score ?? 0,
-        source: input.source ?? 'manual',
-        status: input.status ?? 'NEW_LEAD',
-        accountId,
-      },
+  async deleteLead(organisationId: string, leadId: string): Promise<void> {
+    return withRLS(organisationId, async (tx) => {
+      const lead = await tx.lead.findUnique({
+        where: { id: leadId },
+      });
+
+      if (!lead || lead.organisationId !== organisationId) {
+        throw new Error('Lead not found'); // Generic error to not leak existence
+      }
+
+      await tx.lead.delete({
+        where: { id: leadId },
+      });
     });
-
-    return this.toDTO(lead);
-  }
-
-  async updateLead(accountId: string, leadId: string, input: UpdateLeadInput): Promise<LeadDTO> {
-    const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
-    });
-
-    if (!lead || lead.accountId !== accountId) {
-      throw new Error('Lead not found');
-    }
-
-    console.log(`[Service] Updating lead ${leadId} for account ${accountId}`);
-    const updatedLead = await prisma.lead.update({
-      where: { id: leadId },
-      data: {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email,
-        phone: input.phone,
-        company: input.company,
-        budget: input.budget,
-        score: input.score,
-        status: input.status,
-      },
-    });
-    console.log(`[Service] Update successful for lead ${leadId}`);
-
-    return this.toDTO(updatedLead);
-  }
-
-  async deleteLead(accountId: string, leadId: string): Promise<void> {
-    console.log(`[Service] Deleting lead ${leadId} for account ${accountId}`);
-    const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
-    });
-
-    if (!lead || lead.accountId !== accountId) {
-      console.error(`[Service] Delete failed: Lead not found or unauthorized. Lead: ${lead?.id}, Account: ${lead?.accountId} vs ${accountId}`);
-      throw new Error('Lead not found');
-    }
-
-    await prisma.lead.delete({
-      where: { id: leadId },
-    });
-    console.log(`[Service] Delete successful for lead ${leadId}`);
   }
 
   private toDTO(lead: Lead): LeadDTO {
