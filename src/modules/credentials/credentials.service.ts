@@ -64,7 +64,7 @@ export class CredentialsService {
             data: {
                 organisationId,
                 provider,
-                encryptedData,
+                encryptedData: encryptedData as any,
                 keyId: 'v1', // Default key version
             },
         });
@@ -90,7 +90,7 @@ export class CredentialsService {
             return null;
         }
 
-        const secrets = decryptAs<ProviderSecretsMap[P]>(record.encryptedData);
+        const secrets = decryptAs<ProviderSecretsMap[P]>(Buffer.from(record.encryptedData));
 
         return {
             id: record.id,
@@ -131,7 +131,7 @@ export class CredentialsService {
         await prisma.credential.update({
             where: { id: existing.id },
             data: {
-                encryptedData,
+                encryptedData: encryptedData as any,
                 updatedAt: new Date(),
                 keyId: 'v1',
             },

@@ -1,0 +1,160 @@
+# Database Architecture & Security Model
+
+This document outlines the multi-tenant database architecture for Convertr, designed for strict security and isolation using PostgreSQL native features.
+
+## 🏗️ High-Level Architecture
+
+The database is divided into **6 logical schemas**, separating concerns and access levels.
+
+```mermaid
+graph TD
+    subgraph Public Access
+        Auth[(AUTH Schema)]
+        Ads[(ADS Schema)]
+        Analytics[(ANALYTICS Schema)]
+    end
+
+    subgraph RLS Protected
+        CRM[(CRM Schema)]
+    end
+
+    subgraph Private/Internal
+        Secrets[(SECRETS Schema)]
+        Internal[(INTERNAL Schema)]
+    end
+
+    Client(App Client Role) -->|Read/Write| Auth
+    Client -->|Read/Write| Ads
+    Client -->|Append Only| Analytics
+    Client -->|RLS Restricted| CRM
+
+    Worker(App Internal Role) -->|Full Access| Secrets
+    Worker -->|Full Access| Internal
+    Worker -->|Full Access| Auth
+    Worker -->|Full Access| CRM
+    Worker -->|Full Access| Ads
+
+    Client -.->|❌ NO ACCESS| Secrets
+    Client -.->|❌ NO ACCESS| Internal
+```
+
+---
+
+## 🔐 Security Roles & Permissions
+
+We use two primary PostgreSQL roles to enforce access control at the database level.
+
+| Schema | Role: `app_client` (API) | Role: `app_internal` (Workers) | Description |
+| :--- | :--- | :--- | :--- |
+| **auth** | ✅ `SELECT`, `INSERT`, `UPDATE` | ✅ `ALL` | User identity, sessions, and organizations. |
+| **crm** | 🛡️ **RLS Protected** | ✅ `ALL` | Leads, calls, appointments. Client sees ONLY their data. |
+| **ads** | ✅ `SELECT`, `INSERT`, `UPDATE` | ✅ `ALL` | Ad accounts, campaigns (linked to Org). |
+| **analytics**| ✅ `INSERT` (Append-only) | ✅ `ALL` | High-volume events, KPIs. |
+| **secrets** | ❌ **DENIED** | ✅ `ALL` | Encrypted tokens. **Invisible to the API.** |
+| **internal** | ❌ **DENIED** | ✅ `ALL` | System logs, AI prompts, Feature flags. |
+
+> **RLS (Row Level Security)**: For the `crm` schema, the database checks `organisation_id = current_setting('app.org_id')` for every query. If the session variable is not set or doesn't match, the query returns 0 rows.
+
+---
+
+## 🗄️ Entity Relationship Diagram (ERD)
+
+### 1. Auth & Identity ([auth](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/src/middleware/authenticate.ts#4-64))
+This schema handles user login and tenancy.
+
+```mermaid
+erDiagram
+    Account ||--o{ Membership : "has"
+    Organisation ||--o{ Membership : "has"
+    Account ||--o{ RefreshToken : "owns"
+    Account ||--o{ AuthLog : "generates"
+
+    Account {
+        uuid id PK
+        string email
+        string password_hash
+    }
+
+    Organisation {
+        uuid id PK
+        string slug
+        string name
+    }
+
+    Membership {
+        uuid account_id FK
+        uuid organisation_id FK
+        enum role "OWNER, ADMIN, MEMBER"
+    }
+```
+
+### 2. CRM Core (`crm`) - **RLS Protected**
+All tables here have `organisation_id`. Data is strictly isolated.
+
+```mermaid
+erDiagram
+    Organisation ||--o{ Lead : "owns"
+    Lead ||--o{ Call : "has"
+    Lead ||--o{ Appointment : "has"
+    Lead ||--o{ LeadStatusHistory : "tracks"
+    Call ||--o| CallTranscript : "has"
+
+    Lead {
+        uuid id PK
+        uuid organisation_id FK "RLS Key"
+        string email
+        string status
+    }
+
+    Call {
+        uuid id PK
+        uuid organisation_id FK "RLS Key"
+        int duration
+    }
+    
+    Appointment {
+        uuid id PK
+        uuid organisation_id FK "RLS Key"
+        datetime scheduled_at
+    }
+```
+
+### 3. Advertising ([ads](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/src/modules/leads/leads.controller.ts#12-32)) & Secrets (`secrets`)
+Separation of public ad config and private credentials.
+
+```mermaid
+erDiagram
+    Organisation ||--o{ AdAccount : "owns"
+    AdAccount ||--o{ Campaign : "contains"
+    Organisation ||--o{ Credential : "owns (Secrets Schema)"
+
+    AdAccount {
+        uuid id PK
+        uuid organisation_id FK
+        string external_id
+    }
+
+    Credential {
+        uuid id PK
+        string provider
+        bytes encrypted_data "⚠️ SECRETS SCHEMA"
+    }
+```
+
+---
+
+## 🛠️ Usage in Code
+
+### Switching Context (RLS)
+The backend uses a transaction wrapper to safely inject the context.
+
+```typescript
+// src/lib/rls.ts
+await tx.$executeRaw`SELECT set_config('app.org_id', ${organisationId}, true)`;
+return callback(tx);
+```
+
+### API Requirements
+Every request to CRM endpoints must include:
+*   `Authorization`: Bearer Token (Identifies User)
+*   `x-organisation-id`: UUID (Identifies Tenant Context)
