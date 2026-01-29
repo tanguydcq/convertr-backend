@@ -54,6 +54,15 @@ export class MetaClient {
         });
     }
 
+    /**
+     * Get a single campaign
+     */
+    async getCampaign(campaignId: string): Promise<MetaApiResponse<MetaCampaign>> {
+        return this.get<MetaCampaign>(`/${campaignId}`, {
+            fields: 'id,name,status,objective,created_time,updated_time,insights{spend,reach,impressions,cpm,cpc,ctr}',
+        });
+    }
+
     // ===========================================================================
     // Lead Forms & Leads
     // ===========================================================================

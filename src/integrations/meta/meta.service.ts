@@ -319,6 +319,20 @@ export class MetaService {
     }
 
     /**
+     * Get a single campaign by ID
+     */
+    async getCampaign(organisationId: string, campaignId: string): Promise<any> {
+        const config = await this.getConfigForAccount(organisationId);
+        if (!config) {
+            throw new Error('Meta integration not configured for this account');
+        }
+
+        this.initClient(config);
+        const response = await this.ensureClient().getCampaign(campaignId);
+        return response.data;
+    }
+
+    /**
      * Get insights
      */
     async getInsights(organisationId: string, _campaignId?: string, _datePreset?: string): Promise<any[]> {
