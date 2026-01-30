@@ -335,10 +335,150 @@ export class MetaService {
     /**
      * Get insights
      */
-    async getInsights(organisationId: string, _campaignId?: string, _datePreset?: string): Promise<any[]> {
-        // Placeholder - MetaClient doesn't have getInsights yet
-        // Returning empty array to satisfy controller
-        return [];
+    /**
+     * Get full campaign details including sub-objects and insights
+     */
+    async getFullCampaignDetails(organisationId: string, campaignId: string): Promise<any> {
+        const config = await this.getConfigForAccount(organisationId);
+        if (!config) {
+            throw new Error('Meta integration not configured for this account');
+        }
+
+        this.initClient(config);
+        const client = this.ensureClient();
+
+        console.log(`[MetaService] Fetching full details for campaign ${campaignId}`);
+
+        try {
+            const [campaign, adSets, ads, dailyInsights, demographics] = await Promise.all([
+                client.getCampaign(campaignId).catch(err => { console.error('[MetaService] Campaign fetch failed', err); throw err; }),
+                client.getAdSets(campaignId).catch(err => { console.error('[MetaService] AdSets fetch failed', err); throw new Error(`AdSets fetch failed: ${err.message}`); }),
+                client.getAds(campaignId).catch(err => { console.error('[MetaService] Ads fetch failed', err); throw new Error(`Ads fetch failed: ${err.message}`); }),
+                client.getDailyInsights(campaignId).catch(err => { console.error('[MetaService] DailyInsights fetch failed', err); return { data: [] }; }), // Fail gracefully
+                client.getDemographics(campaignId).catch(err => { console.error('[MetaService] Demographics fetch failed', err); return { data: [] }; }) // Fail gracefully
+            ]);
+
+            return {
+                campaign: campaign.data,
+                adSets: adSets.data,
+                ads: ads.data,
+                dailyInsights: dailyInsights.data || [],
+                demographics: demographics.data || []
+            };
+        } catch (error) {
+            console.error('[MetaService] Error fetching full campaign details:', error);
+            throw error;
+        }
+    }
+    async syncCampaignDetails(organisationId: string, campaignId: string): Promise<void> {
+        const details = await this.getFullCampaignDetails(organisationId, campaignId);
+        const { campaign, adSets, ads, dailyInsights } = details;
+
+        // 1. Get Ad Account config to link to the correct ad account in DB
+        const config = await this.getConfigForAccount(organisationId);
+        if (!config?.adAccountId) {
+            throw new Error('Ad Account ID not found');
+        }
+
+        // 2. Find internal AdAccount ID
+        const adAccount = await prisma.adAccount.findFirst({
+            where: { organisationId, externalId: config.adAccountId }
+        });
+
+        if (!adAccount) {
+            // Need to sync ad account first properly, but for now throwing error
+            throw new Error(`Ad Account ${config.adAccountId} not found in DB. Please sync Ad Accounts first.`);
+        }
+
+        // 3. Upsert Campaign
+        const dbCampaign = await prisma.campaign.upsert({
+            where: {
+                adAccountId_externalId: {
+                    adAccountId: adAccount.id,
+                    externalId: campaign.id
+                }
+            },
+            update: {
+                name: campaign.name,
+                status: campaign.status,
+                objective: campaign.objective,
+                startTime: campaign.start_time ? new Date(campaign.start_time) : null,
+                stopTime: campaign.stop_time ? new Date(campaign.stop_time) : null
+            },
+            create: {
+                organisationId,
+                adAccountId: adAccount.id,
+                externalId: campaign.id,
+                name: campaign.name,
+                status: campaign.status,
+                objective: campaign.objective,
+                startTime: campaign.start_time ? new Date(campaign.start_time) : null,
+                stopTime: campaign.stop_time ? new Date(campaign.stop_time) : null
+            }
+        });
+
+        // 4. Upsert Ad Sets
+        for (const set of adSets) {
+            await prisma.adSet.upsert({
+                where: {
+                    campaignId_externalId: {
+                        campaignId: dbCampaign.id,
+                        externalId: set.id
+                    }
+                },
+                update: {
+                    name: set.name,
+                    status: set.status,
+                    startTime: set.start_time ? new Date(set.start_time) : null,
+                    stopTime: set.end_time ? new Date(set.end_time) : null, // Meta API uses end_time for adsets
+                },
+                create: {
+                    campaignId: dbCampaign.id,
+                    externalId: set.id,
+                    name: set.name,
+                    status: set.status,
+                    startTime: set.start_time ? new Date(set.start_time) : null,
+                    stopTime: set.end_time ? new Date(set.end_time) : null
+                }
+            });
+        }
+
+        // 5. Upsert Ads
+        // First we need to map ad set external IDs to internal UUIDs for the relation
+        const dbAdSets = await prisma.adSet.findMany({
+            where: { campaignId: dbCampaign.id }
+        });
+        const adSetMap = new Map(dbAdSets.map(s => [s.externalId, s.id]));
+
+        for (const ad of ads) {
+            if (adSetId) {
+                await (prisma as any).ad.upsert({
+                    where: {
+                        adSetId_externalId: {
+                            adSetId: adSetId,
+                            externalId: ad.id
+                        }
+                    },
+                    update: {
+                        name: ad.name,
+                        status: ad.status,
+                        creativeId: ad.creative?.id,
+                        creativeUrl: ad.creative?.image_url || ad.creative?.thumbnail_url
+                    },
+                    create: {
+                        campaignId: dbCampaign.id,
+                        adSetId: adSetId,
+                        externalId: ad.id,
+                        name: ad.name,
+                        status: ad.status,
+                        creativeId: ad.creative?.id,
+                        creativeUrl: ad.creative?.image_url || ad.creative?.thumbnail_url
+                    }
+                });
+            } else {
+                console.warn(`[MetaService] Ad ${ad.id} skipped - could not find Ad Set`);
+            }
+        }
     }
 }
 

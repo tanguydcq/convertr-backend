@@ -43,6 +43,12 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                     properties: {
                         error: { type: 'string' }
                     }
+                },
+                500: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
                 }
             }
         }
@@ -274,6 +280,70 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
         }
     });
 
+
+
+    // GET /api/integrations/meta/campaigns/:id/full
+    app.get('/campaigns/:id/full', {
+        preHandler: [authenticate],
+        schema: {
+            params: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string' }
+                }
+            },
+            response: {
+                200: {
+                    type: 'object',
+                    properties: {
+                        campaign: { type: 'object', additionalProperties: true },
+                        adSets: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                        ads: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                        dailyInsights: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                        demographics: { type: 'array', items: { type: 'object', additionalProperties: true } }
+                    }
+                },
+                401: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
+                },
+                400: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
+                },
+                404: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
+                },
+                500: {
+                    type: 'object',
+                    properties: {
+                        error: { type: 'string' }
+                    }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            const organisationId = getOrganisationId(request);
+            const fullDetails = await metaService.getFullCampaignDetails(organisationId, id);
+            return fullDetails;
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            // DEBUG: Return actual error
+            return reply.status(500).send({ error: error instanceof Error ? error.message : 'Unknown Error' });
+        }
+    });
 
 
     // POST /api/integrations/meta/campaigns/sync

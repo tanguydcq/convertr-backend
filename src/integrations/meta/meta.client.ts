@@ -63,6 +63,46 @@ export class MetaClient {
         });
     }
 
+    /**
+     * Get ad sets for a campaign
+     */
+    async getAdSets(campaignId: string): Promise<MetaApiResponse<any[]>> {
+        return this.get<any[]>(`/${campaignId}/adsets`, {
+            fields: 'id,name,status,created_time,insights{results,spend,impressions,reach,cpm,cpc,ctr,actions}',
+        });
+    }
+
+    /**
+     * Get ads for a campaign
+     */
+    async getAds(campaignId: string): Promise<MetaApiResponse<any[]>> {
+        return this.get<any[]>(`/${campaignId}/ads`, {
+            fields: 'id,name,status,adset_id,creative{id,image_url,thumbnail_url},insights{results,spend,impressions,cpm,cpc,ctr,actions}',
+        });
+    }
+
+    /**
+     * Get daily insights for a campaign
+     */
+    async getDailyInsights(campaignId: string): Promise<MetaApiResponse<any[]>> {
+        return this.get<any[]>(`/${campaignId}/insights`, {
+            time_increment: '1',
+            date_preset: 'last_30d',
+            fields: 'spend,impressions,actions',
+        });
+    }
+
+    /**
+     * Get demographics for a campaign
+     */
+    async getDemographics(campaignId: string): Promise<MetaApiResponse<any[]>> {
+        return this.get<any[]>(`/${campaignId}/insights`, {
+            breakdowns: 'age,gender',
+            date_preset: 'lifetime',
+            fields: 'spend,impressions,reach',
+        });
+    }
+
     // ===========================================================================
     // Lead Forms & Leads
     // ===========================================================================
@@ -158,6 +198,11 @@ export class MetaClient {
             );
         }
 
-        return { data: json.data as T, paging: json.paging };
+        if ('data' in json) {
+            return { data: json.data as T, paging: json.paging };
+        } else {
+            // Handle single node response (no data wrapper)
+            return { data: json as unknown as T };
+        }
     }
 }

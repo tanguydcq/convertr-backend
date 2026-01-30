@@ -65,6 +65,43 @@ export interface MetaCampaign {
     objective: string;
     created_time: string;
     updated_time: string;
+    insights?: MetaInsights;
+}
+
+export interface MetaAdSet {
+    id: string;
+    name: string;
+    status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+    created_time: string;
+    insights?: MetaInsights;
+}
+
+export interface MetaAd {
+    id: string;
+    name: string;
+    status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+    creative?: {
+        id: string;
+        image_url?: string;
+        thumbnail_url?: string;
+    };
+    insights?: MetaInsights;
+}
+
+export interface MetaInsights {
+    data: Array<{
+        spend: string;
+        impressions: string;
+        reach: string;
+        cpm: string;
+        cpc: string;
+        ctr: string;
+        actions?: Array<{ action_type: string; value: string }>;
+        date_start?: string;
+        date_stop?: string;
+        age?: string;
+        gender?: string;
+    }>;
 }
 
 // ============================================================================
