@@ -2,6 +2,9 @@ import { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { metaService } from './meta.service.js';
 import { authenticate } from '../../middleware/index.js';
+import { structureSyncService } from '../../services/meta-ads/structure-sync.service.js';
+import { insightsSyncService } from '../../services/meta-ads/insights-sync.service.js';
+import { timeSeriesReconstructionService } from '../../services/meta-ads/timeseries-reconstruction.service.js';
 
 export const metaRoutes: FastifyPluginAsync = async (app) => {
     // Helper to get organisation ID
@@ -428,6 +431,120 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
                 return reply.status(400).send({ error: error.message });
             }
             return reply.status(500).send({ error: 'Internal Server Error' });
+        }
+    });
+
+    // =========================================================================
+    // SYNC ENDPOINTS (Append-only architecture)
+    // =========================================================================
+
+    // POST /api/integrations/meta/accounts/:accountId/sync-structure
+    app.post<{
+        Params: { accountId: string };
+    }>('/accounts/:accountId/sync-structure', {
+        preHandler: [authenticate],
+    }, async (request, reply) => {
+        const { accountId } = request.params;
+        try {
+            const organisationId = getOrganisationId(request);
+
+            const result = await structureSyncService.syncAccountStructure(
+                organisationId,
+                accountId
+            );
+
+            return {
+                status: 'ok',
+                campaigns: {
+                    total: result.campaigns.length,
+                    created: result.campaigns.filter(r => r.created).length,
+                },
+                adSets: {
+                    total: result.adSets.length,
+                    created: result.adSets.filter(r => r.created).length,
+                },
+                ads: {
+                    total: result.ads.length,
+                    created: result.ads.filter(r => r.created).length,
+                },
+            };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: error instanceof Error ? error.message : 'Internal Server Error' });
+        }
+    });
+
+    // POST /api/integrations/meta/campaigns/:campaignId/sync-insights
+    app.post<{
+        Params: { campaignId: string };
+    }>('/campaigns/:campaignId/sync-insights', {
+        preHandler: [authenticate],
+    }, async (request, reply) => {
+        const { campaignId } = request.params;
+        try {
+            const organisationId = getOrganisationId(request);
+
+            // Ingest raw insights
+            const insightResult = await insightsSyncService.fetchAndIngestInsights(
+                organisationId,
+                campaignId
+            );
+
+            if (!insightResult) {
+                return { status: 'ok', message: 'No new insights available' };
+            }
+
+            // Trigger time-series reconstruction
+            const reconstructionResult = await timeSeriesReconstructionService.reconstructIncremental(
+                organisationId,
+                insightResult.campaignId
+            );
+
+            return {
+                status: 'ok',
+                insight: {
+                    id: insightResult.insightId,
+                    fetchedAt: insightResult.fetchedAt.toISOString(),
+                },
+                reconstruction: {
+                    pointsCreated: reconstructionResult.pointsCreated,
+                    from: reconstructionResult.fromTs.toISOString(),
+                    to: reconstructionResult.toTs.toISOString(),
+                },
+            };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: error instanceof Error ? error.message : 'Internal Server Error' });
+        }
+    });
+
+    // POST /api/integrations/meta/sync-all-insights
+    // Sync insights for all active campaigns
+    app.post('/sync-all-insights', {
+        preHandler: [authenticate],
+    }, async (request, reply) => {
+        try {
+            const organisationId = getOrganisationId(request);
+
+            const result = await insightsSyncService.syncAllActiveCampaigns(organisationId);
+
+            return {
+                status: 'ok',
+                synced: result.synced,
+                errors: result.errors,
+            };
+        } catch (error) {
+            request.log.error(error);
+            if (error instanceof Error && error.message.includes('x-organisation-id')) {
+                return reply.status(400).send({ error: error.message });
+            }
+            return reply.status(500).send({ error: error instanceof Error ? error.message : 'Internal Server Error' });
         }
     });
 };

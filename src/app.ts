@@ -13,6 +13,7 @@ import { authRoutes } from './modules/auth/index.js';
 import { leadsRoutes } from './modules/leads/index.js';
 import { adminRoutes } from './modules/admin/index.js';
 import { metaRoutes } from './integrations/meta/index.js';
+import { analyticsRoutes } from './modules/analytics/index.js';
 
 // Extend Fastify types (see src/types/fastify.d.ts)
 
@@ -63,6 +64,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(leadsRoutes, { prefix: '/api/leads' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(metaRoutes, { prefix: '/api/integrations/meta' });
+  await app.register(analyticsRoutes, { prefix: '/api/analytics' });
 
   // Global error handler
   app.setErrorHandler((error: FastifyError, request, reply) => {

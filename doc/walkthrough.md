@@ -1,3 +1,442 @@
+# Meta Ads Integration - Walkthrough
+
+## Summary
+
+Successfully extended the Convertr database architecture to support Meta Ads integration with:
+- **7 new Prisma models** for Meta campaign hierarchy and time-series analytics
+- **1 modified model** (Campaign with `objective` field)
+- Full compliance with existing multi-tenant isolation patterns
+
+---
+
+## Changes Made
+
+### ads Schema Extensions
+
+| Model | Purpose |
+|-------|---------|
+| [AdSet](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L245-L262) | Meta ad set hierarchy (campaign → adset → ad) |
+| [Ad](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L265-L280) | Meta ad level with creative reference |
+| [CampaignStructureSnapshot](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L287-L299) | Append-only campaign structure audit |
+| [AdSetStructureSnapshot](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L302-L314) | Append-only ad set structure audit |
+| [AdStructureSnapshot](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L317-L329) | Append-only ad structure audit |
+
+### analytics Schema Extensions
+
+| Model | Purpose |
+|-------|---------|
+| [CampaignInsightRaw](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L457-L468) | Raw Meta /insights responses (append-only) |
+| [CampaignKpiTimeSeries](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L471-L486) | ML-ready time-series (second granularity) |
+
+### Modified Model
+
+[Campaign](file:///home/chokellaaaaaaa/perso/Convertr/convertr-backend/prisma/schema.prisma#L224-L241) - Added `objective` field for Meta campaign objective
+
+---
+
+## Data Flow Architecture
+
+```mermaid
+graph LR
+    subgraph Meta API
+        M1[Structure]
+        M2[Insights]
+    end
+
+    subgraph ads Schema
+        A1[Campaign/AdSet/Ad]
+        A2[*StructureSnapshot]
+    end
+
+    subgraph analytics Schema
+        AN1[CampaignInsightRaw]
+        AN2[CampaignKpiTimeSeries]
+    end
+
+    subgraph ML
+        ML1[Optimizer]
+    end
+
+    M1 -->|sync| A1
+    M1 -->|snapshot| A2
+    M2 -->|poll 30s-2min| AN1
+    AN1 -->|reconstruct| AN2
+    AN2 -->|query| ML1
+    A2 -->|structure at ts| ML1
+```
+
+---
+
+## Verification
+
+| Step | Result |
+|------|--------|
+| `npx prisma validate` | ✅ Schema valid |
+| `npx prisma db push` | ✅ Database synced |
+| `npx prisma generate` | ✅ Client regenerated |
+
+---
+
+## Next Steps (Application Layer)
+
+1. **Worker: Structure Sync** - Implement Meta API polling for campaign structure
+2. **Worker: Insights Polling** - Poll `/insights` every 30s-2min for active campaigns
+3. **Worker: Time-series Reconstruction** - Interpolate cumulative KPIs at second granularity
+4. **ML Model Integration** - Query `CampaignKpiTimeSeries` with structure context
+
+```diff:schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth", "crm", "ads", "secrets", "internal", "analytics"]
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: auth
+// Identity management, public access allowed for app_client
+// -----------------------------------------------------------------------------
+
+model Account {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organisations Membership[]
+  refreshTokens RefreshToken[]
+  authLogs      AuthLog[]
+
+  @@map("accounts")
+  @@schema("auth")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  accountId String   @map("account_id") @db.Uuid
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@map("refresh_tokens")
+  @@schema("auth")
+}
+
+model Organisation {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  members    Membership[]
+  leads      Lead[]
+  campaigns  Campaign[]
+  adAccounts AdAccount[]
+
+  @@map("organisations")
+  @@schema("auth")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@schema("auth")
+}
+
+model Membership {
+  id             String   @id @default(uuid()) @db.Uuid
+  accountId      String   @map("account_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, organisationId])
+  @@map("memberships")
+  @@schema("auth")
+}
+
+model AuthLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  action    String
+  metadata  Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("auth_logs")
+  @@schema("auth")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: crm
+// Business data, PROTECTED BY RLS via app.org_id
+// -----------------------------------------------------------------------------
+
+model Lead {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  email          String
+  phone          String?
+  company        String?
+  budget         Int?
+  score          Int      @default(0)
+  source         String   @default("manual")
+  status         String   @default("NEW_LEAD")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organisation  Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade) // Logic deleted by RLS actually
+  statusHistory LeadStatusHistory[]
+  calls         Call[]
+  appointments  Appointment[]
+
+  @@index([organisationId])
+  @@index([status])
+  @@map("leads")
+  @@schema("crm")
+}
+
+model LeadStatusHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid // Denormalized for RLS performance/simplicity
+  status         String
+  changedAt      DateTime @default(now()) @map("changed_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_status_history")
+  @@schema("crm")
+}
+
+model Call {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  duration       Int      @default(0)
+  status         String
+  startedAt      DateTime @default(now()) @map("started_at")
+
+  lead       Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  transcript CallTranscript?
+
+  @@index([organisationId])
+  @@map("calls")
+  @@schema("crm")
+}
+
+model CallTranscript {
+  id             String   @id @default(uuid()) @db.Uuid
+  callId         String   @unique @map("call_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_transcripts")
+  @@schema("crm")
+}
+
+model Appointment {
+  id             String   @id @default(uuid()) @db.Uuid
+  leadId         String   @map("lead_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  title          String
+  scheduledAt    DateTime @map("scheduled_at")
+  status         String   @default("SCHEDULED")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId])
+  @@map("appointments")
+  @@schema("crm")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: ads
+// Advertising data, linked to organisation, no sensitive tokens here
+// -----------------------------------------------------------------------------
+
+model AdAccount {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  platformId     String   @map("platform_id") @db.Uuid
+  externalId     String   @map("external_id")
+  name           String
+  currency       String
+  status         String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  platform     Platform     @relation(fields: [platformId], references: [id])
+  campaigns    Campaign[]
+
+  @@unique([platformId, externalId])
+  @@index([organisationId])
+  @@map("ad_accounts")
+  @@schema("ads")
+}
+
+model Platform {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique // e.g. "facebook", "google"
+
+  adAccounts AdAccount[]
+
+  @@map("platforms")
+  @@schema("ads")
+}
+
+model Campaign {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  adAccountId    String   @map("ad_account_id") @db.Uuid
+  externalId     String   @map("external_id")
+  name           String
+  status         String
+  budget         Decimal?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  adAccount    AdAccount    @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([adAccountId, externalId])
+  @@index([organisationId])
+  @@map("campaigns")
+  @@schema("ads")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: secrets
+// Sensitive credentials. NO ACCESS for app_client.
+// Accessed only by app_internal (workers) via dedicated Prisma Client
+// -----------------------------------------------------------------------------
+
+model Credential {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  provider       String // e.g. "facebook_ads"
+  encryptedData  Bytes    @map("encrypted_data") // Houses access_token, refresh_token
+  keyId          String   @map("key_id") // Reference to the encryption key used
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([organisationId])
+  @@map("credentials")
+  @@schema("secrets")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: internal
+// System logs, AI prompts, internal logic. Restricted access.
+// -----------------------------------------------------------------------------
+
+model SystemLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  level     String
+  message   String
+  context   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("system_logs")
+  @@schema("internal")
+}
+
+model IaPrompt {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  template  String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("ia_prompts")
+  @@schema("internal")
+}
+
+model ScoringModel {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  config    Json
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("scoring_models")
+  @@schema("internal")
+}
+
+model FeatureFlag {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  rules     Json? // Targeting rules
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("feature_flags")
+  @@schema("internal")
+}
+
+// -----------------------------------------------------------------------------
+// SCHEMA: analytics
+// Append-only high volume data
+// -----------------------------------------------------------------------------
+
+model Event {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  eventType      String   @map("event_type")
+  properties     Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organisationId, createdAt])
+  @@map("events")
+  @@schema("analytics")
+}
+
+model DailyKpi {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  date           DateTime @db.Date
+  metric         String
+  value          Decimal
+
+  @@unique([organisationId, date, metric])
+  @@map("daily_kpis")
+  @@schema("analytics")
+}
+
+model FunnelMetric {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  stepName       String   @map("step_name")
+  count          Int      @default(0)
+  date           DateTime @db.Date
+
+  @@index([organisationId, date])
+  @@map("funnel_metrics")
+  @@schema("analytics")
+}
+===
 generator client {
   provider = "prisma-client-js"
 }
@@ -475,9 +914,10 @@ model CampaignKpiTimeSeries {
   isInterpolated  Boolean  @default(false) @map("is_interpolated")
   sourceInsightId String?  @map("source_insight_id") @db.Uuid // FK to raw insight
 
-  @@unique([campaignId, ts]) // One record per campaign per second
   @@index([campaignId, ts])
   @@index([organisationId, ts])
+  @@unique([campaignId, ts]) // One record per campaign per second
   @@map("campaign_kpi_time_series")
   @@schema("analytics")
 }
+```
