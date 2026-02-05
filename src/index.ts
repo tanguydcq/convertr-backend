@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { config } from './config/index.js';
 import prisma from './lib/prisma.js';
 import { redis } from './lib/redis.js';
+import { pollingScheduler } from './jobs/polling-scheduler.js';
 
 async function main() {
   try {
@@ -16,6 +17,9 @@ async function main() {
     await redis.connect();
     await redis.ping();
     console.log('✓ Redis connected');
+
+    // Initialize automatic Meta Ads polling
+    await pollingScheduler.initialize();
 
     // Start server
     await app.listen({ port: config.PORT, host: '0.0.0.0' });
@@ -34,6 +38,10 @@ async function shutdown(signal: string) {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
 
   try {
+    // Stop polling jobs first
+    await pollingScheduler.shutdown();
+    console.log('✓ Polling scheduler stopped');
+
     await prisma.$disconnect();
     console.log('✓ PostgreSQL disconnected');
 
@@ -51,3 +59,4 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 main();
+

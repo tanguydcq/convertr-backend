@@ -70,24 +70,74 @@ export class MetaService {
 
     /**
      * Select an Ad Account for the integration
+     * Also creates/updates the AdAccount record in the database
      */
     async selectAdAccount(organisationId: string, adAccountId: string): Promise<void> {
-        const hasCreds = await credentialsService.hasCredentials(organisationId, 'meta_ads');
-        if (!hasCreds) {
+        const creds = await credentialsService.getCredentials(organisationId, 'meta_ads');
+        if (!creds) {
             throw new Error('No Meta credentials found. Connect account first.');
         }
 
-        const creds = await credentialsService.getCredentials(organisationId, 'meta_ads');
-        if (!creds) {
-            throw new Error('Failed to retrieve credentials.');
+        // Fetch ad account details from Meta
+        this.initClient({ accessToken: creds.secrets.accessToken, adAccountId });
+        const client = this.ensureClient();
+
+        // Get all ad accounts to find the selected one
+        const accountsResponse = await client.getAdAccounts();
+        const selectedAccount = accountsResponse.data.find(
+            acc => acc.id === adAccountId || acc.id === `act_${adAccountId}` || `act_${acc.id}` === adAccountId
+        );
+
+        if (!selectedAccount) {
+            throw new Error(`Ad account ${adAccountId} not found or not accessible`);
         }
 
+        // Ensure platform exists
+        let platform = await prisma.platform.findUnique({
+            where: { name: 'facebook' },
+        });
+
+        if (!platform) {
+            platform = await prisma.platform.create({
+                data: { name: 'facebook' },
+            });
+        }
+
+        // Normalize the external ID (remove act_ prefix for storage)
+        const externalId = selectedAccount.id.replace('act_', '');
+
+        // Upsert the AdAccount in the database
+        await prisma.adAccount.upsert({
+            where: {
+                platformId_externalId: {
+                    platformId: platform.id,
+                    externalId: externalId,
+                },
+            },
+            update: {
+                name: selectedAccount.name,
+                currency: selectedAccount.currency || 'EUR',
+                status: selectedAccount.account_status?.toString() || 'ACTIVE',
+            },
+            create: {
+                organisationId,
+                platformId: platform.id,
+                externalId: externalId,
+                name: selectedAccount.name,
+                currency: selectedAccount.currency || 'EUR',
+                status: selectedAccount.account_status?.toString() || 'ACTIVE',
+            },
+        });
+
+        // Update credentials with the selected ad account ID
         const newSecrets = {
             ...creds.secrets,
-            adAccountId,
+            adAccountId: externalId,
         };
 
         await credentialsService.rotateCredentials(organisationId, 'meta_ads', newSecrets);
+
+        console.log(`[MetaService] Ad account ${selectedAccount.name} (${externalId}) selected and saved for org ${organisationId}`);
     }
 
     /**

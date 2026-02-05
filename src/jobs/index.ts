@@ -18,5 +18,7 @@ export {
 export { scheduleInsightsPolling, stopInsightsPolling } from './insights-polling.job.js';
 export { scheduleStructurePolling, stopStructurePolling } from './structure-polling.job.js';
 export { queueReconstruction } from './timeseries-reconstruction.job.js';
+export { pollingScheduler } from './polling-scheduler.js';
 
 console.log('✓ Job workers initialized');
+
