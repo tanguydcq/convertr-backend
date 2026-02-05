@@ -243,6 +243,37 @@ export class StructureSyncService {
                     adSet as unknown as Record<string, unknown>
                 );
                 results.adSets.push(adSetResult);
+
+                // Upsert AdSet in ads schema
+                const dbCampaign = await prisma.campaign.findFirst({
+                    where: { organisationId, externalId: campaign.id },
+                });
+
+                if (dbCampaign) {
+                    await prisma.adSet.upsert({
+                        where: {
+                            campaignId_externalId: {
+                                campaignId: dbCampaign.id,
+                                externalId: adSet.id,
+                            },
+                        },
+                        update: {
+                            name: adSet.name,
+                            status: adSet.status,
+                            dailyBudget: adSet.daily_budget ? parseFloat(adSet.daily_budget) : null,
+                            lifetimeBudget: adSet.lifetime_budget ? parseFloat(adSet.lifetime_budget) : null,
+                        },
+                        create: {
+                            organisationId,
+                            campaignId: dbCampaign.id,
+                            externalId: adSet.id,
+                            name: adSet.name,
+                            status: adSet.status,
+                            dailyBudget: adSet.daily_budget ? parseFloat(adSet.daily_budget) : null,
+                            lifetimeBudget: adSet.lifetime_budget ? parseFloat(adSet.lifetime_budget) : null,
+                        },
+                    });
+                }
             }
 
             // Fetch and snapshot ads
@@ -254,6 +285,39 @@ export class StructureSyncService {
                     ad as unknown as Record<string, unknown>
                 );
                 results.ads.push(adResult);
+
+                // Upsert Ad in ads schema
+                const dbAdSet = await prisma.adSet.findFirst({
+                    where: { organisationId, externalId: ad.adset_id },
+                });
+
+                if (dbAdSet) {
+                    const creativeUrl = ad.creative?.image_url || ad.creative?.thumbnail_url || null;
+
+                    await prisma.ad.upsert({
+                        where: {
+                            adSetId_externalId: {
+                                adSetId: dbAdSet.id,
+                                externalId: ad.id,
+                            },
+                        },
+                        update: {
+                            name: ad.name,
+                            status: ad.status,
+                            creativeId: ad.creative?.id || null,
+                            creativeUrl: creativeUrl,
+                        },
+                        create: {
+                            organisationId,
+                            adSetId: dbAdSet.id,
+                            externalId: ad.id,
+                            name: ad.name,
+                            status: ad.status,
+                            creativeId: ad.creative?.id || null,
+                            creativeUrl: creativeUrl,
+                        },
+                    });
+                }
             }
         }
 

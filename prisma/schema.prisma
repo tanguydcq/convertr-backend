@@ -272,6 +272,7 @@ model Ad {
   name           String
   status         String
   creativeId     String?  @map("creative_id") // Optional Meta creative reference
+  creativeUrl    String?  @map("creative_url") // URL to the creative image/thumbnail
   createdAt      DateTime @default(now()) @map("created_at")
 
   adSet AdSet @relation(fields: [adSetId], references: [id], onDelete: Cascade)
