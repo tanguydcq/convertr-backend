@@ -10,6 +10,7 @@ export interface AppointmentDTO {
     title: string;
     description?: string;
     location?: string;
+    duration: number; // minutes
     scheduledAt: Date;
     status: string;
     createdAt: Date;
@@ -21,6 +22,7 @@ export interface CreateAppointmentInput {
     title: string;
     description?: string;
     location?: string;
+    duration?: number;
     scheduledAt: string | Date; // Can be string from JSON
     status?: string;
 }
@@ -40,6 +42,8 @@ class AppointmentsService {
             const where: any = { organisationId };
 
             if (range.start && range.end) {
+                // Adjust fetch logic if needed, but simple overlap check is complex for pure range on just scheduledAt.
+                // For now sticking to scheduledAt within range.
                 where.scheduledAt = {
                     gte: range.start,
                     lte: range.end,
@@ -92,6 +96,7 @@ class AppointmentsService {
                     title: input.title,
                     description: input.description,
                     location: input.location,
+                    duration: input.duration || 60,
                     scheduledAt: new Date(input.scheduledAt),
                     status: input.status || 'SCHEDULED',
                 },
@@ -120,6 +125,7 @@ class AppointmentsService {
                     title: input.title,
                     description: input.description,
                     location: input.location,
+                    duration: input.duration,
                     scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : undefined,
                     status: input.status,
                     leadId: input.leadId,
@@ -274,6 +280,7 @@ class AppointmentsService {
             title: appointment.title,
             description: appointment.description,
             location: appointment.location,
+            duration: appointment.duration,
             scheduledAt: appointment.scheduledAt,
             status: appointment.status,
             createdAt: appointment.createdAt, // Fix: Ensure this field exists in DTO if used

@@ -177,6 +177,7 @@ model Appointment {
   title          String
   description    String?
   location       String?
+  duration       Int      @default(60) // Duration in minutes
   scheduledAt    DateTime @map("scheduled_at")
   status         String   @default("SCHEDULED")
   createdAt      DateTime @default(now()) @map("created_at")
