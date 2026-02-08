@@ -8,6 +8,10 @@ const appointmentsRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.put('/:id', appointmentsController.updateAppointment);
     fastify.delete('/:id', appointmentsController.deleteAppointment);
     fastify.get('/ics', appointmentsController.downloadICS);
+    fastify.post('/import', appointmentsController.importICS);
+    fastify.delete('/imported', appointmentsController.deleteImported);
+    fastify.get('/orphan-count', appointmentsController.countOrphanImported);
+    fastify.delete('/orphan', appointmentsController.deleteOrphanImported);
 };
 
 export { appointmentsRoutes };

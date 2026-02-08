@@ -96,6 +96,66 @@ export class AppointmentsController {
             return reply.status(500).send({ error: error.message });
         }
     }
+
+    async importICS(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const organisationId = req.headers['x-organisation-id'] as string;
+            if (!organisationId) return reply.status(400).send({ error: 'Organisation ID required' });
+
+            // Handle file upload (multipart) or raw content
+            // Assuming multipart/form-data with 'file' field
+            const data = await req.file();
+            if (!data) return reply.status(400).send({ error: 'File required' });
+
+            const buffer = await data.toBuffer();
+            const icsContent = buffer.toString('utf-8');
+
+            const count = await appointmentsService.importICS(organisationId, icsContent);
+            return reply.status(200).send({ message: `Imported ${count} events` });
+        } catch (error: any) {
+            req.log.error(error);
+            return reply.status(500).send({ error: error.message });
+        }
+    }
+
+    async deleteImported(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const organisationId = req.headers['x-organisation-id'] as string;
+            if (!organisationId) return reply.status(400).send({ error: 'Organisation ID required' });
+
+            const count = await appointmentsService.deleteImported(organisationId);
+            return reply.status(200).send({ message: `Deleted ${count} imported events` });
+        } catch (error: any) {
+            req.log.error(error);
+            return reply.status(500).send({ error: error.message });
+        }
+    }
+
+    async countOrphanImported(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const organisationId = req.headers['x-organisation-id'] as string;
+            if (!organisationId) return reply.status(400).send({ error: 'Organisation ID required' });
+
+            const count = await appointmentsService.countOrphanImported(organisationId);
+            return reply.status(200).send({ count });
+        } catch (error: any) {
+            req.log.error(error);
+            return reply.status(500).send({ error: error.message });
+        }
+    }
+
+    async deleteOrphanImported(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const organisationId = req.headers['x-organisation-id'] as string;
+            if (!organisationId) return reply.status(400).send({ error: 'Organisation ID required' });
+
+            const count = await appointmentsService.deleteOrphanImported(organisationId);
+            return reply.status(200).send({ message: `Deleted ${count} orphan events`, count });
+        } catch (error: any) {
+            req.log.error(error);
+            return reply.status(500).send({ error: error.message });
+        }
+    }
 }
 
 export const appointmentsController = new AppointmentsController();

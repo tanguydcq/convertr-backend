@@ -169,7 +169,8 @@ class AppointmentsService {
 
             for (const apt of appointments) {
                 const start = new Date(apt.scheduledAt);
-                const end = new Date(start.getTime() + 60 * 60 * 1000); // Default 1 hour duration if not specified
+                const durationMinutes = apt.duration || 60;
+                const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
                 const now = new Date();
 
                 const formatICSDate = (date: Date) => date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -201,15 +202,22 @@ class AppointmentsService {
         // as we focused on the structure.
         // But let's try to do a simple implementation.
 
-        const lines = icsContent.split(/\r\n|\n|\r/);
+        // Unfold lines (RFC 5545)
+        const rawLines = icsContent.split(/\r\n|\n|\r/);
+        const lines: string[] = [];
+        for (const line of rawLines) {
+            if (line.startsWith(' ') || line.startsWith('\t')) {
+                if (lines.length > 0) {
+                    lines[lines.length - 1] += line.slice(1);
+                }
+            } else {
+                if (line.trim()) lines.push(line.trim());
+            }
+        }
+
         let count = 0;
         let currentEvent: any = {};
         let insideEvent = false;
-
-        // We need a default lead for imported events if we enforce leadId. 
-        // For now, let's assume we find a "Waitlist" lead or similar, or create a dummy one?
-        // actually schema requires leadId. 
-        // Strategy: Find or create a "Imported" lead for this org.
 
         const dummyLead = await withRLS(organisationId, async (tx) => {
             let lead = await tx.lead.findFirst({
@@ -229,6 +237,24 @@ class AppointmentsService {
             return lead;
         });
 
+        // Date parser handles YYYYMMDDTHHMMSS[Z] and YYYYMMDD
+        const parseICSDate = (str: string) => {
+            if (!str) return new Date();
+            // Remove Z if present, we treat as local/UTC loosely for now
+            const clean = str.replace('Z', '');
+            const pattern = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?/;
+            const match = clean.match(pattern);
+            if (match) {
+                const year = +match[1];
+                const month = +match[2] - 1;
+                const day = +match[3];
+                const hour = match[4] ? +match[4] : 0; // Default to midnight if T missing
+                const minute = match[5] ? +match[5] : 0;
+                const second = match[6] ? +match[6] : 0;
+                return new Date(Date.UTC(year, month, day, hour, minute, second));
+            }
+            return new Date();
+        };
 
         for (const line of lines) {
             if (line.startsWith('BEGIN:VEVENT')) {
@@ -236,35 +262,44 @@ class AppointmentsService {
                 currentEvent = {};
             } else if (line.startsWith('END:VEVENT')) {
                 if (insideEvent && currentEvent.DTSTART && currentEvent.SUMMARY) {
-                    // Parse date: 20230101T120000Z
-                    const parseICSDate = (str: string) => {
-                        const pattern = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/;
-                        const match = str.match(pattern);
-                        if (match) {
-                            return new Date(Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]));
-                        }
-                        return new Date();
-                    };
-
                     try {
+                        const start = parseICSDate(currentEvent.DTSTART);
+                        let duration = 60; // Default
+
+                        if (currentEvent.DTEND) {
+                            const end = parseICSDate(currentEvent.DTEND);
+                            const diffMs = end.getTime() - start.getTime();
+                            if (diffMs > 0) duration = Math.floor(diffMs / 60000);
+                        }
+
                         await this.createAppointment(organisationId, {
                             leadId: dummyLead.id,
                             title: currentEvent.SUMMARY,
-                            scheduledAt: parseICSDate(currentEvent.DTSTART),
+                            scheduledAt: start,
+                            duration: duration,
                             status: 'IMPORTED'
                         });
                         count++;
                     } catch (e) {
-                        console.error("Failed to import event", e);
+                        console.error("Failed to import individual event", e);
                     }
                 }
                 insideEvent = false;
             } else if (insideEvent) {
-                const [key, ...val] = line.split(':');
-                if (key && val) {
-                    const value = val.join(':');
-                    if (key.includes('DTSTART')) currentEvent.DTSTART = value;
-                    if (key.includes('SUMMARY')) currentEvent.SUMMARY = value;
+                // Split by first colon
+                const colonIndex = line.indexOf(':');
+                if (colonIndex !== -1) {
+                    let key = line.substring(0, colonIndex);
+                    const value = line.substring(colonIndex + 1);
+
+                    // Handle parameters like DTSTART;TZID=...
+                    if (key.includes(';')) {
+                        key = key.split(';')[0];
+                    }
+
+                    if (key === 'DTSTART') currentEvent.DTSTART = value;
+                    if (key === 'DTEND') currentEvent.DTEND = value;
+                    if (key === 'SUMMARY') currentEvent.SUMMARY = value;
                 }
             }
         }
@@ -278,13 +313,49 @@ class AppointmentsService {
             leadId: appointment.leadId,
             organisationId: appointment.organisationId,
             title: appointment.title,
-            description: appointment.description,
-            location: appointment.location,
+            description: appointment.description || undefined,
+            location: appointment.location || undefined,
             duration: appointment.duration,
             scheduledAt: appointment.scheduledAt,
             status: appointment.status,
-            createdAt: appointment.createdAt, // Fix: Ensure this field exists in DTO if used
+            createdAt: appointment.createdAt,
         };
+    }
+
+    /**
+     * Delete all imported appointments for an organisation
+     */
+    async deleteImported(organisationId: string): Promise<number> {
+        return withRLS(organisationId, async (tx) => {
+            const result = await tx.appointment.deleteMany({
+                where: { organisationId, status: 'IMPORTED' },
+            });
+            return result.count;
+        });
+    }
+
+    /**
+     * Count imported appointments without a source (orphan imports from file uploads)
+     */
+    async countOrphanImported(organisationId: string): Promise<number> {
+        return withRLS(organisationId, async (tx) => {
+            const count = await tx.appointment.count({
+                where: { organisationId, status: 'IMPORTED', sourceId: null },
+            });
+            return count;
+        });
+    }
+
+    /**
+     * Delete imported appointments without a source (orphan imports)
+     */
+    async deleteOrphanImported(organisationId: string): Promise<number> {
+        return withRLS(organisationId, async (tx) => {
+            const result = await tx.appointment.deleteMany({
+                where: { organisationId, status: 'IMPORTED', sourceId: null },
+            });
+            return result.count;
+        });
     }
 }
 
