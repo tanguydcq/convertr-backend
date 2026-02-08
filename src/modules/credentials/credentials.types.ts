@@ -8,7 +8,7 @@
 /**
  * Supported external providers
  */
-export type Provider = 'meta_ads' | 'retell_ai';
+export type Provider = 'meta_ads' | 'retell_ai' | 'google_ads' | 'tiktok_ads';
 
 /**
  * Meta Ads API credentials
@@ -29,10 +29,34 @@ export interface RetellAISecrets {
     apiKey: string;
 }
 
+
+/**
+ * Google Ads API credentials
+ */
+export interface GoogleAdsSecrets {
+    access_token: string;
+    refresh_token: string;
+    scope: string;
+    token_type: string;
+    expiry_date: number;
+}
+
+/**
+ * TikTok Ads API credentials
+ */
+export interface TikTokAdsSecrets {
+    access_token: string;
+    refresh_token: string;
+    scope: string;
+    open_id: string;
+    expires_in: number;
+    refresh_expires_in: number;
+}
+
 /**
  * Union type for all provider secrets
  */
-export type ProviderSecrets = MetaAdsSecrets | RetellAISecrets;
+export type ProviderSecrets = MetaAdsSecrets | RetellAISecrets | GoogleAdsSecrets | TikTokAdsSecrets;
 
 /**
  * Map provider to its secrets type
@@ -40,6 +64,8 @@ export type ProviderSecrets = MetaAdsSecrets | RetellAISecrets;
 export interface ProviderSecretsMap {
     meta_ads: MetaAdsSecrets;
     retell_ai: RetellAISecrets;
+    google_ads: GoogleAdsSecrets;
+    tiktok_ads: TikTokAdsSecrets;
 }
 
 /**
