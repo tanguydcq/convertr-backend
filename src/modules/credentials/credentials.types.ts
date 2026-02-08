@@ -8,7 +8,18 @@
 /**
  * Supported external providers
  */
-export type Provider = 'meta_ads' | 'retell_ai';
+export type Provider = 'meta_ads' | 'retell_ai' | 'google_ads';
+
+/**
+ * Google Ads API credentials
+ */
+export interface GoogleAdsSecrets {
+    access_token: string;
+    refresh_token: string;
+    scope: string;
+    token_type: string;
+    expiry_date: number;
+}
 
 /**
  * Meta Ads API credentials
@@ -40,6 +51,7 @@ export type ProviderSecrets = MetaAdsSecrets | RetellAISecrets;
 export interface ProviderSecretsMap {
     meta_ads: MetaAdsSecrets;
     retell_ai: RetellAISecrets;
+    google_ads: GoogleAdsSecrets;
 }
 
 /**
