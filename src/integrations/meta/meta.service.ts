@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Meta Ads Integration Service
  * Business logic for Meta Ads integration

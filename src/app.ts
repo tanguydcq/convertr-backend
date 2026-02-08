@@ -13,6 +13,7 @@ import { authRoutes } from './modules/auth/index.js';
 import { leadsRoutes } from './modules/leads/index.js';
 import { adminRoutes } from './modules/admin/index.js';
 import { metaRoutes } from './integrations/meta/index.js';
+import { appointmentsRoutes } from './modules/crm/appointments/appointments.routes.js';
 
 // Extend Fastify types (see src/types/fastify.d.ts)
 
@@ -61,6 +62,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // API Routes
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(leadsRoutes, { prefix: '/api/leads' });
+  await app.register(appointmentsRoutes, { prefix: '/api/appointments' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(metaRoutes, { prefix: '/api/integrations/meta' });
 

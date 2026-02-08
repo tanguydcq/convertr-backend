@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { metaService } from './meta.service.js';

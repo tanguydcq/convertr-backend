@@ -175,6 +175,8 @@ model Appointment {
   leadId         String   @map("lead_id") @db.Uuid
   organisationId String   @map("organisation_id") @db.Uuid
   title          String
+  description    String?
+  location       String?
   scheduledAt    DateTime @map("scheduled_at")
   status         String   @default("SCHEDULED")
   createdAt      DateTime @default(now()) @map("created_at")
